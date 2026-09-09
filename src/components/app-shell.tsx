@@ -124,7 +124,7 @@ function LoadedAppShell() {
       {view === "settings" && <SettingsView />}
     </main>
     {selectedAgent && <AgentWorkspaceV3 agent={selectedAgent} messages={messages[selectedAgent.id] ?? []} setMessages={setMessages} onClose={() => setSelectedAgent(null)} onCreateTask={(task) => addTask({ ...task, subjectId: subjects.some((subject) => subject.id === selectedAgent.id) ? selectedAgent.id : task.subjectId })} onRoute={routeRequest} />}
-    {editor && <TaskEditor recurringAction={!storedTasks.some((task) => task.id === editor.id) ? <GoLessonButton tasks={storedTasks} save={(additions) => { if (cloud) cloud.import(additions.map((task) => ({ kind: "task", id: task.id, data: { ...task }, version: 0 }))); else commitTasks([...additions, ...storedTasks]); }} /> : undefined} key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task) => { const next = storedTasks.some((item) => item.id === task.id) ? updateTask(storedTasks, task.id, task) : [task, ...storedTasks]; if (commitTasks(next, { [task.id]: editorVersion })) setEditor(null); }} />}
+    {editor && <TaskEditor tasks={storedTasks} recurringAction={!storedTasks.some((task) => task.id === editor.id) ? <GoLessonButton tasks={storedTasks} save={(additions) => { if (cloud) cloud.import(additions.map((task) => ({ kind: "task", id: task.id, data: { ...task }, version: 0 }))); else commitTasks([...additions, ...storedTasks]); }} /> : undefined} key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task) => { const next = storedTasks.some((item) => item.id === task.id) ? updateTask(storedTasks, task.id, task) : [task, ...storedTasks]; if (commitTasks(next, { [task.id]: editorVersion })) setEditor(null); }} />}
   </div></TaskContext.Provider>;
 }
 
