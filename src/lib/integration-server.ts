@@ -30,7 +30,7 @@ const requestOrigin = (request?: Request) => {
   if (forwardedHost) return new URL(`${forwardedProto || new URL(request.url).protocol.replace(":", "")}://${forwardedHost}`).origin;
   return new URL(request.url).origin;
 };
-export const appOrigin = (request?: Request) => requestOrigin(request) ?? configuredOrigin() ?? "http://localhost:3000";
+export const appOrigin = (request?: Request) => configuredOrigin() ?? requestOrigin(request) ?? "http://localhost:3000";
 export const callbackUrl = (request?: Request) => `${appOrigin(request)}/api/integrations/google/callback`;
 export const cookieOptions = (request?: Request) => ({ httpOnly: true, sameSite: "lax" as const, secure: appOrigin(request).startsWith("https:"), path: "/", maxAge: 60 * 60 * 24 * 30 });
 
