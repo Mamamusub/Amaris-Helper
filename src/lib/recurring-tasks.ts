@@ -3,8 +3,9 @@ import type { Task } from "./types";
 
 export function goLessons(tasks: Task[], today: string, enable = false): Task[] {
   if (!enable && !tasks.some((task) => task.recurrence === "go-kus-thursday")) return [];
-  const weekday = new Date(`${today}T12:00:00Z`).getUTCDay();
-  const first = shiftDay(today, (4 - weekday + 7) % 7);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const weekday = new Date(`${monthStart}T12:00:00Z`).getUTCDay();
+  const first = shiftDay(monthStart, (4 - weekday + 7) % 7);
   const known = new Set(tasks.map((task) => task.id));
   return Array.from({ length: 12 }, (_, index) => {
     const deadline = shiftDay(first, index * 7);

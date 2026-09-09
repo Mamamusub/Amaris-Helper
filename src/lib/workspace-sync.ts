@@ -1,6 +1,6 @@
 ﻿import { collection, materialize, overlay, type CloudRecord, type Kind, type Operation, type WorkspaceData } from "./workspace-model";
 export type SyncStatus = "กำลังบันทึก" | "บันทึกแล้ว" | "ออฟไลน์" | "บันทึกไม่สำเร็จ" | "กำลังโหลด";
-export type SyncSnapshot = { records: CloudRecord[]; data: WorkspaceData; pending: Operation[]; status: SyncStatus; error: string; conflict: boolean };
+export type SyncSnapshot = { records: CloudRecord[]; data: WorkspaceData; pending: Operation[]; acknowledged: string[]; status: SyncStatus; error: string; conflict: boolean };
 export class WorkspaceSync {
   readonly key: string;
   private listeners = new Set<() => void>();
@@ -18,7 +18,7 @@ export class WorkspaceSync {
       for (let i = 0; i < storage.length; i++) { const key = storage.key(i); if (key?.startsWith(`${this.key}.op.`)) { const operation = JSON.parse(storage.getItem(key)!) as Operation; pending.set(operation.operationId, operation); } }
       initial.pending = [...pending.values()];
     }
-    this.snapshot = { ...initial, data: materialize(overlay(initial.records, initial.pending)), status: "กำลังโหลด", error: "", conflict: false };
+    this.snapshot = { ...initial, acknowledged: [], data: materialize(overlay(initial.records, initial.pending)), status: "กำลังโหลด", error: "", conflict: false };
   }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   getSnapshot = () => this.snapshot;
@@ -84,7 +84,7 @@ export class WorkspaceSync {
         if (body.userId !== this.userId) { this.accountChanged(); return; }
         // A GET started before an edit must not consume that edit's queue entry.
         const pending = operation ? this.snapshot.pending.filter((item) => item.operationId !== operation.operationId) : this.snapshot.pending;
-        this.publish({ records: body.records, pending, status: pending.length ? "กำลังบันทึก" : "บันทึกแล้ว", error: "", conflict: false });
+        this.publish({ records: body.records, pending, acknowledged: operation ? [...this.snapshot.acknowledged, operation.operationId] : this.snapshot.acknowledged, status: pending.length ? "กำลังบันทึก" : "บันทึกแล้ว", error: "", conflict: false });
         if (operation) this.storage.removeItem(`${this.key}.op.${operation.operationId}`);
         if (!pending.length) break;
       }

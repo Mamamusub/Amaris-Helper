@@ -75,7 +75,9 @@ function SyncBar({ cloud }: { cloud: WorkspaceSync }) {
   const state = useSyncExternalStore(cloud.subscribe, cloud.getSnapshot, cloud.getSnapshot);
   const [importRecords] = useState(() => { try { return localImport(localStorage); } catch { return null; } });
   const [showImport, setShowImport] = useState(() => !localStorage.getItem(`amaris.import-choice.${cloud.userId}`));
-  const [importQueued, setImportQueued] = useState(false);
+  const [importOperation, setImportOperation] = useState<string | null>(null);
+  const importQueued = !!importOperation && state.pending.some((operation) => operation.operationId === importOperation);
+  const importConfirmed = !!importOperation && state.acknowledged.includes(importOperation);
   useEffect(() => {
     const retry = () => void cloud.sync();
     const offline = () => cloud.offline();
@@ -94,6 +96,6 @@ function SyncBar({ cloud }: { cloud: WorkspaceSync }) {
     <button className="text-button" onClick={() => void cloud.sync(true)}>ลองใหม่ / โหลดล่าสุด</button>
     {!!state.pending.length && <><button className="text-button" onClick={exportDraft}>ส่งออกแบบร่าง</button><button className="text-button" onClick={() => { exportDraft(); void cloud.discardPending(); }}>ส่งออกและทิ้งการแก้ไขที่ยังไม่ส่ง ใช้ข้อมูลเซิร์ฟเวอร์</button></>}
     {importRecords === null && <span role="alert">อ่านข้อมูล Local ไม่สำเร็จ ต้นฉบับยังอยู่ในเครื่อง</span>}
-    {!!importRecords?.length && (showImport ? <div><strong>พบข้อมูลในเครื่อง: {importRecords.filter((r) => r.kind === "task").length} งาน · {importRecords.filter((r) => r.kind === "subject").length} วิชา · {importRecords.filter((r) => r.kind === "thread").length} ชุดโน้ต/บทสนทนา · {importRecords.filter((r) => r.kind === "run").length} Pipeline</strong><button className="secondary-button" disabled={importQueued || !!state.pending.length || state.status !== "บันทึกแล้ว"} onClick={() => { if (cloud.import(importRecords)) setImportQueued(true); }}>นำข้อมูลในเครื่องเข้าบัญชี</button><button className="text-button" onClick={() => { localStorage.setItem(`amaris.import-choice.${cloud.userId}`, "skip"); setShowImport(false); }}>ข้ามก่อน</button>{importQueued && state.pending.length === 0 && state.status === "บันทึกแล้ว" && <span>นำเข้าสำเร็จแล้ว ต้นฉบับ Local ยังอยู่</span>}</div> : <button className="text-button" onClick={() => setShowImport(true)}>นำเข้าข้อมูล Local</button>)}
+    {!!importRecords?.length && (showImport ? <div><strong>พบข้อมูลในเครื่อง: {importRecords.filter((r) => r.kind === "task").length} งาน · {importRecords.filter((r) => r.kind === "subject").length} วิชา · {importRecords.filter((r) => r.kind === "thread").length} ชุดโน้ต/บทสนทนา · {importRecords.filter((r) => r.kind === "run").length} Pipeline</strong><button className="secondary-button" disabled={importQueued || !!state.pending.length || state.status !== "บันทึกแล้ว"} onClick={() => { if (cloud.import(importRecords)) setImportOperation(cloud.getSnapshot().pending.at(-1)?.operationId ?? null); }}>นำข้อมูลในเครื่องเข้าบัญชี</button><button className="text-button" onClick={() => { localStorage.setItem(`amaris.import-choice.${cloud.userId}`, "skip"); setShowImport(false); }}>ข้ามก่อน</button>{importConfirmed && <span>นำเข้าสำเร็จแล้ว ต้นฉบับ Local ยังอยู่</span>}</div> : <button className="text-button" onClick={() => setShowImport(true)}>นำเข้าข้อมูล Local</button>)}
   </div>;
 }

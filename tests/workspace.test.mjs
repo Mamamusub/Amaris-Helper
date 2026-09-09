@@ -134,3 +134,21 @@ test("Local import excludes untouched demo records and never removes the source"
   const original = JSON.stringify([...demoTasks, task("real")]); storage.setItem("agent-helper.tasks", original);
   assert.equal(localImport(storage).length, 1); assert.equal(storage.getItem("agent-helper.tasks"), original);
 });
+
+test("discarding an import never counts as a server acknowledgement", async () => {
+  const wire = transport(bob); wire.faults.offline = true;
+  const store = new WorkspaceSync(bob, memory(), wire.request);
+  store.import([change("discarded-import")]);
+  const operationId = store.getSnapshot().pending[0].operationId;
+  await settled(store);
+  assert.equal(store.getSnapshot().acknowledged.includes(operationId), false);
+  wire.faults.offline = false;
+  await store.discardPending();
+  assert.equal(store.getSnapshot().pending.length, 0);
+  assert.equal(store.getSnapshot().acknowledged.includes(operationId), false);
+  assert.equal((await snapshot(bob)).some((row) => row.id === "discarded-import"), false);
+  store.import([change("confirmed-import")]);
+  const confirmedId = store.getSnapshot().pending[0].operationId;
+  await settled(store);
+  assert.equal(store.getSnapshot().acknowledged.includes(confirmedId), true);
+});
