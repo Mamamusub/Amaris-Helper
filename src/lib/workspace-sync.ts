@@ -51,12 +51,13 @@ export class WorkspaceSync {
     catch { this.report("เก็บแบบร่างในเครื่องไม่สำเร็จ กรุณาคัดลอกข้อความไว้และเพิ่มพื้นที่จัดเก็บ"); return false; }
     void this.sync(); return true;
   }
-  async sync() {
+  async sync(force = false) {
     if (this.active || this.disposed) return;
     this.active = true;
     try {
-      if (this.snapshot.conflict) return;
+      if (this.snapshot.conflict && !force) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) { this.offline(); return; }
+      if (force && this.snapshot.conflict) this.publish({ conflict: false, error: "", status: "กำลังโหลด" });
       if (this.snapshot.pending.length) this.publish({ status: "กำลังบันทึก", error: "" });
       while (true) {
         const operation = this.snapshot.pending[0];
