@@ -5,6 +5,7 @@ export class WorkspaceSync {
   readonly key: string;
   private listeners = new Set<() => void>();
   private active = false;
+  private forceRequested = false;
   private disposed = false;
   private snapshot: SyncSnapshot;
   constructor(readonly userId: string, private storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> & Partial<Pick<Storage, "length" | "key">>, private request: typeof fetch = fetch, private accountChanged: () => void = () => {}) {
@@ -52,7 +53,14 @@ export class WorkspaceSync {
     void this.sync(); return true;
   }
   async sync(force = false) {
-    if (this.active || this.disposed) return;
+    if (this.disposed) return;
+    if (this.active) {
+      if (force) {
+        this.forceRequested = true;
+        this.publish({ status: "กำลังโหลด", error: "" });
+      }
+      return;
+    }
     this.active = true;
     try {
       if (this.snapshot.conflict && !force) return;
@@ -74,7 +82,13 @@ export class WorkspaceSync {
         if (!pending.length) break;
       }
     } catch { if (!this.disposed) this.report("เชื่อมต่อไม่ได้ แบบร่างยังอยู่ในบัญชีนี้บนเครื่อง กดลองใหม่เมื่อออนไลน์"); }
-    finally { this.active = false; }
+    finally {
+      this.active = false;
+      if (this.forceRequested && !this.disposed) {
+        this.forceRequested = false;
+        void this.sync(true);
+      }
+    }
   }
   async discardPending() {
     if (this.active) return false;
