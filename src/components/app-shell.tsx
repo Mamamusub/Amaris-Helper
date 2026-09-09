@@ -283,7 +283,6 @@ function PortView() {
   const dataRows = tableRows.slice(1).filter((row) => row[0]?.trim().toUpperCase() !== "TOTAL");
   const totalRow = tableRows.find((row) => row[0]?.trim().toUpperCase() === "TOTAL") ?? [];
   const summaryRow = tableRows[1] ?? [];
-  const summaryRow = tableRows[1] ?? [];
   const column = (name: string) => headers.findIndex((header) => header.trim().toUpperCase() === name);
   const valueAt = (row: string[], name: string) => row[column(name)] ?? "-";
   const totalValue = (name: string) => name === "VALUE" ? valueAt(summaryRow, "INVESTED(THB)") : name === "PROFIT%" ? valueAt(summaryRow, "ALL PROFIT") : valueAt(totalRow, name);
