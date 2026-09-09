@@ -51,7 +51,11 @@ export async function POST(request: Request) {
       }),
     });
     if (response.status === 401 || response.status === 403) return fail("API Key ใช้งานไม่ได้หรือไม่มีสิทธิ์เรียก API", 401);
-    if (response.status === 429) return fail("OpenAI จำกัดการใช้งานชั่วคราว กรุณารอสักครู่แล้วลองใหม่", 429);
+    if (response.status === 429) {
+      let code = "";
+      try { code = String((await response.clone().json() as { error?: { code?: string } }).error?.code ?? ""); } catch { /* Keep the generic rate-limit message. */ }
+      return fail(code === "insufficient_quota" ? "เครดิตหรือ quota ของ OpenAI ไม่เพียงพอ กรุณาตรวจ Billing และ Usage ของบัญชีที่สร้าง API Key" : "OpenAI จำกัดการใช้งานชั่วคราว กรุณารอสักครู่แล้วลองใหม่", 429);
+    }
     if (!response.ok) return fail("OpenAI ไม่สามารถประมวลผลคำสั่งนี้ได้ กรุณาลองใหม่", 502);
     const data = await response.json() as { status?: string; output?: { content?: { type: string; text?: string; refusal?: string }[] }[] };
     const content = (data.output ?? []).flatMap((item) => item.content ?? []);
