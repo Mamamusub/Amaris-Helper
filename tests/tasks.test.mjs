@@ -191,3 +191,17 @@ test("Focus includes unassigned Calendar deadlines but suppresses imported, comp
   const updated = focusCandidates([{ ...shown[0], title: "Edited task", deadline: "2026-09-12" }], [event], "2026-09-09");
   assert.equal(updated.length, 1); assert.equal(updated[0].title, "Edited task"); assert.equal(updated[0].deadline, "2026-09-12");
 });
+
+test("weekly Go lessons use actual Thursdays, cross year boundaries and never recreate edited/deleted occurrences", () => {
+  const h = harness(); const { goLessons } = h.load("src/lib/recurring-tasks.ts");
+  assert.equal(goLessons([], "2026-09-09").length, 0);
+  const lessons = goLessons([], "2026-09-09", true);
+  assert.equal(lessons.length, 12); assert.equal(lessons[0].deadline, "2026-09-10");
+  assert.ok(lessons[0].title.includes("(2026/9/10)"));
+  assert.ok(lessons.every((task) => new Date(`${task.deadline}T12:00:00Z`).getUTCDay() === 4));
+  const saved = lessons.map((task, index) => index === 0 ? { ...task, deletedAt: "now" } : task);
+  assert.equal(goLessons(saved, "2026-09-09").length, 0);
+  const yearEnd = goLessons([], "2026-12-31", true);
+  assert.equal(yearEnd[0].deadline, "2026-12-31"); assert.equal(yearEnd[1].deadline, "2027-01-07");
+  assert.ok(yearEnd[1].title.includes("(2027/1/7)"));
+});
