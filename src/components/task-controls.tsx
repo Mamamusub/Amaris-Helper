@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { Subject, Task } from "@/lib/types";
 
 export const TaskContext = createContext<{
@@ -24,11 +24,12 @@ export function TaskControls({ task }: { task: Task }) {
   </div>;
 }
 
-export function TaskEditor({ task, onSave, onClose }: { task: Task; onSave: (task: Task) => void; onClose: () => void }) {
+export function TaskEditor({ task, onSave, onClose, recurringAction }: { task: Task; onSave: (task: Task) => void; onClose: () => void; recurringAction?: ReactNode }) {
   const [draft, setDraft] = useState(task);
   const { subjects } = useContext(TaskContext);
   return <div className="workspace-overlay" role="dialog" aria-modal="true" aria-label="Edit task" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}><form className="panel task-editor" onSubmit={(event) => { event.preventDefault(); if (draft.title.trim()) onSave({ ...draft, title: draft.title.trim() }); }}>
     <div className="panel-heading"><h3>Task details</h3><button type="button" className="close-button" onClick={onClose} aria-label="Close task editor">×</button></div>
+    {recurringAction && <div className="task-editor-recurring">{recurringAction}</div>}
     <label>Title<input autoFocus required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
     <label>Description<textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
     <fieldset><legend>???????</legend>{draft.subtasks?.map((item) => <label key={item.id}><input type="checkbox" checked={item.done} onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks!.map((subtask) => subtask.id === item.id ? { ...subtask, done: event.target.checked } : subtask) })} /><input aria-label="???????????" value={item.title} onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks!.map((subtask) => subtask.id === item.id ? { ...subtask, title: event.target.value } : subtask) })} /></label>)}<button className="secondary-button" type="button" onClick={() => setDraft({ ...draft, subtasks: [...(draft.subtasks ?? []), { id: crypto.randomUUID(), title: "", done: false }] })}>+ ???????</button></fieldset>

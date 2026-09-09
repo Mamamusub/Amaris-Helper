@@ -67,6 +67,14 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .shared-task-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; }
 .task-table-row > .shared-task-actions { flex-basis: 100%; padding-left: 30px; }
 .shared-task-actions .text-button, .deadline .text-button { color: var(--olive); margin-top: 0; }
+.task-editor-recurring { padding-bottom: 2px; }
+.go-lesson-button { background: #f4a261; color: #4a2412; border: 1px solid #df8748; }
+.go-lesson-button:hover:not(:disabled) { background: #ed9150; }
+[data-go-lesson] { --go-lesson-orange: #f4a261; }
+.task-row[data-go-lesson], .deadline[data-go-lesson], .task-table-row[data-go-lesson] { border-left: 3px solid var(--go-lesson-orange); }
+.calendar-event-chip[data-go-lesson], .agenda-item[data-go-lesson] { background: #fff0e4; color: #9a5428; }
+.calendar-event-chip[data-go-lesson] i { background: #df8748; }
+.calendar-mobile-dots i[data-go-lesson] { background: #df8748; }
 .task-editor { background: #f8faf4; width: min(520px, 94vw); max-height: 90vh; overflow-y: auto; padding: 24px; display: grid; gap: 14px; }
 .task-editor label { display: grid; gap: 6px; font-size: 13px; }
 .task-editor input:not([type=checkbox]), .task-editor textarea, .task-editor select { width: 100%; border: 1px solid var(--line, #deded5); border-radius: 10px; background: var(--surface, #fff); color: inherit; padding: 10px; font: inherit; }
