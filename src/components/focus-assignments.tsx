@@ -47,7 +47,7 @@ export default function FocusAssignments({ calendarId: selectedCalendarId, tasks
     {status && <p className="muted" role="status">{status} <button className="text-button" onClick={() => setRevision((value) => value + 1)}>Refresh</button></p>}
     {!shown.length && !status && <p className="empty-state">No unfinished assignments due in the next 62 days.</p>}
     {shown.map((task, index) => <div key={task.id}>
-      <div className="task-row" data-go-lesson={task.recurrence === "go-kus-thursday" || undefined}><span className={`task-number n${index}`}>0{index + 1}</span><div className="task-info"><strong>{task.title}</strong><small>{task.deadline ? `Due ${task.deadline}` : "No due date"}</small></div><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span></div>
+      <div className="task-row" style={task.color ? { borderLeftColor: task.color } : undefined} data-go-lesson={task.recurrence === "go-kus-thursday" || undefined}><span className={`task-number n${index}`}>0{index + 1}</span><div className="task-info"><strong>{task.title}</strong><small>{task.deadline ? `Due ${task.deadline}` : "No due date"}</small></div><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span></div>
       {tasks.some((item) => item.id === task.id) ? <TaskControls task={task} /> : <div className="shared-task-actions"><span className="muted">Google Calendar</span><button className="secondary-button" onClick={() => actions.edit(task)}>Edit / Add to Tasks</button><button className="secondary-button" onClick={() => onCreateTask({ ...task, status: "Done" })}>Complete</button></div>}
     </div>)}
   </>;

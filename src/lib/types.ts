@@ -19,6 +19,7 @@ export type Task = {
   recurrence?: "go-kus-thursday";
   id: string;
   title: string;
+  color?: string;
   description: string;
   team: Team;
   assignedAgent: string;
