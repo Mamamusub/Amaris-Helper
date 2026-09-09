@@ -16,6 +16,7 @@ export type Agent = {
 };
 
 export type Task = {
+  recurrence?: "go-kus-thursday";
   id: string;
   title: string;
   description: string;
