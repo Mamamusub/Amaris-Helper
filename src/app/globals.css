@@ -79,6 +79,30 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .port-table tbody tr:first-child td { font-weight:700; }
 .port-table tbody tr:hover { background:#fafcf7; }
 @media(max-width:620px){.port-connect{align-items:stretch;flex-direction:column}.port-connect button{width:100%}.port-panel{align-items:flex-start;padding:20px}.port-data .panel-heading{align-items:flex-start;gap:12px;flex-direction:column}}
+.port-page { max-width:1320px; }
+.port-topline { display:flex; justify-content:space-between; align-items:flex-end; gap:30px; margin-bottom:32px; }
+.port-topline h2 { margin:12px 0 0; font-size:clamp(38px,5vw,66px); line-height:.94; letter-spacing:-3px; }
+.port-topline h2 em { font-family:Georgia,serif; font-weight:400; }
+.port-status { display:flex; align-items:center; gap:9px; color:var(--muted); font:11px 'DM Mono',monospace; }
+.port-status .icon-button { margin-left:8px; }
+.status-dot.syncing { animation:port-pulse 1s infinite; }
+@keyframes port-pulse { 50% { opacity:.35; transform:scale(.75); } }
+.port-error { display:flex; flex-direction:column; gap:5px; margin-bottom:18px; padding:14px 17px; border:1px solid #f0c7b5; border-left:3px solid #d66f42; border-radius:10px; background:#fff5ef; color:#9a5428; font-size:13px; }
+.portfolio-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+.portfolio-metrics>div { min-height:126px; padding:20px; border:1px solid var(--line); border-radius:13px; background:#fff; box-shadow:0 8px 24px #69774e08; }
+.portfolio-metrics span { color:var(--muted); font:10px 'DM Mono',monospace; letter-spacing:.08em; }
+.portfolio-metrics strong { display:block; margin:14px 0 7px; font-size:26px; letter-spacing:-1px; }
+.portfolio-metrics small { color:var(--muted); font-size:11px; }
+.portfolio-metrics strong.gain { color:#4f8a55; }.portfolio-metrics strong.loss { color:#c45d54; }
+.portfolio-grid { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(280px,.75fr); gap:18px; align-items:start; }
+.portfolio-grid .port-data, .allocation-card { min-width:0; border:1px solid var(--line); border-radius:14px; background:#fff; overflow:hidden; }
+.portfolio-grid .panel-heading { padding:20px; }.portfolio-grid .panel-heading h3 { margin:7px 0 0; font-size:19px; }
+.holdings-count { color:var(--muted); font:11px 'DM Mono',monospace; }
+.port-table th { color:var(--muted); background:#fafbf7; font-size:10px; font-weight:500; }.port-table td { color:#596257; }.port-table .ticker { color:var(--ink); letter-spacing:.03em; }
+.trend { margin-left:8px; font-weight:700; }.trend.up { color:#58945d; }.trend.down { color:#cc6659; }
+.allocation-card { padding-bottom:18px; }.allocation-bars { padding:0 20px; }.allocation-row { margin:15px 0; }.allocation-row>div { display:flex; justify-content:space-between; margin-bottom:7px; font-size:12px; }.allocation-row span { color:var(--muted); font:11px 'DM Mono',monospace; }.allocation-row i { display:block; height:6px; overflow:hidden; border-radius:5px; background:#edf1e8; }.allocation-row b { display:block; height:100%; border-radius:5px; background:linear-gradient(90deg,#a6c767,#d7f36b); }
+@media(max-width:900px){.portfolio-metrics{grid-template-columns:repeat(2,1fr)}.portfolio-grid{grid-template-columns:1fr}}
+@media(max-width:620px){.port-topline{align-items:flex-start;flex-direction:column}.portfolio-metrics{grid-template-columns:1fr 1fr;gap:8px}.portfolio-metrics>div{padding:14px;min-height:106px}.portfolio-metrics strong{font-size:20px}.port-status{width:100%;justify-content:flex-end}}
 
 /* Shared task controls inherit the workspace palette and buttons. */
 .shared-task-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; }

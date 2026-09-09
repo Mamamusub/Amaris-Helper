@@ -142,7 +142,6 @@ function Dashboard({ calendarId, tasks, allTasks, onCreateTask, runs, onRoute, o
 }
 
 function TeamGrid({ onOpenAgent }: { onOpenAgent: (agent: Agent) => void }) { return <div className="content"><div className="view-intro"><div><span className="section-kicker">YOUR AI TEAM / 10 AGENTS</span><h2>Everyone has a<br /><em>part to play.</em></h2></div><p>Specialists, not a chatbot collection. Each agent has a role, a context, and a handoff.</p></div><div className="team-grid">{teamOrder.map((team) => <section className="team-section" key={team}><div className="team-heading"><div><span className="eyebrow">{teamMeta[team].eyebrow}</span><h3>{teamMeta[team].label}</h3></div><span className="team-count">{agents.filter((agent) => agent.team === team).length} agents</span></div><div className="agent-cards">{agents.filter((agent) => agent.team === team).map((agent) => <AgentCard agent={agent} key={agent.id} onClick={() => onOpenAgent(agent)} />)}</div></section>)}</div></div>; }
-
 function AgentCard({ agent, onClick }: { agent: Agent; onClick: () => void }) { return <button className="agent-card" onClick={onClick}><div className="agent-card-top"><Avatar agent={agent} /><span className={`agent-status ${agent.status}`}><i />{agent.status}</span></div><div className="agent-card-body"><span className="team-tag">{agent.team}</span><h4>{agent.name}</h4><p>{agent.role}</p><small>{agent.description}</small></div><div className="agent-card-foot"><span>{agent.capabilities.slice(0, 2).join(" · ")}</span><b>↗</b></div></button>; }
 function Avatar({ agent, small = false }: { agent?: Agent; small?: boolean }) { return <div className={small ? "avatar small" : "avatar"} role="img" aria-label={agent?.name ?? "Agent"} style={{ background: agent?.color ?? "#d7f36b", fontSize: agent && getAgent(agent.id) ? (small ? 16 : 30) : undefined }}>{agent?.avatar ?? "?"}</div>; }
 function TaskRow({ task, index }: { task: Task; index: number }) { return <div className="task-row" style={task.color ? { borderLeftColor: task.color } : undefined} data-go-lesson={task.recurrence === "go-kus-thursday" || undefined}><span className={`task-number n${index}`}>0{index + 1}</span><div className="task-info"><strong>{task.title}</strong><small>{task.team} · {task.deadline ? `Due ${task.deadline}` : "No due date"}</small></div><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span></div>; }
@@ -263,34 +262,33 @@ function AgentWorkspaceV3({ agent, messages, setMessages, onClose, onCreateTask,
 }
 
 function PortView() {
-  const [sheet, setSheet] = useState("");
-  const [range, setRange] = useState("Summarize!A1:I100");
   const [rows, setRows] = useState<string[][]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const load = async (event?: FormEvent) => {
-    event?.preventDefault();
+  const [updatedAt, setUpdatedAt] = useState("");
+  const load = async () => {
     setLoading(true); setError("");
     try {
-      const params = new URLSearchParams({ id: sheet, range });
-      const response = await fetch(`/api/integrations/google/sheets?${params}`, { cache: "no-store" });
+      const response = await fetch("/api/integrations/google/sheets", { cache: "no-store" });
       const data = await response.json() as { values?: string[][]; error?: string };
       if (!response.ok) throw new Error(data.error || "โหลดข้อมูล Google Sheet ไม่สำเร็จ");
-      setRows(data.values ?? []);
+      setRows(data.values ?? []); setUpdatedAt(new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }));
     } catch (loadError) { setError(loadError instanceof Error ? loadError.message : "โหลดข้อมูลไม่สำเร็จ"); }
     finally { setLoading(false); }
   };
-  useEffect(() => {
-    const timer = window.setTimeout(() => { void load(); }, 0);
-    return () => window.clearTimeout(timer);
-    // The initial load intentionally uses the initial configured values.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, []);
   const headerIndex = rows.findIndex((row) => row.some((cell) => cell.trim().toUpperCase() === "NAME"));
-  const tableRows = headerIndex >= 0 ? rows.slice(headerIndex).filter((row) => row.some((cell) => cell.trim())) : rows.filter((row) => row.some((cell) => cell.trim()));
+  const tableRows = headerIndex >= 0 ? rows.slice(headerIndex).filter((row) => row.some((cell) => cell.trim())) : [];
   const headers = tableRows[0] ?? [];
-  const dataRows = tableRows.slice(1);
-  return <div className="content"><div className="view-intro compact"><div><span className="section-kicker">WORKSPACE PORT</span><h2>Move your data<br /><em>forward.</em></h2></div><p>แสดงข้อมูลพอร์ตจาก Google Sheets ใน workspace นี้</p></div><form className="port-connect" onSubmit={load}><label>Google Sheet URL or ID<input value={sheet} onChange={(event) => setSheet(event.target.value)} placeholder="ใช้ค่าที่ตั้งใน .env.local ถ้าเว้นว่าง" /></label><label>Range<input value={range} onChange={(event) => setRange(event.target.value)} placeholder="PORT!A1:I100" required /></label><button className="primary-button" type="submit" disabled={loading}>{loading ? "กำลังโหลด…" : "โหลดข้อมูล"}</button></form>{error && <p className="integration-feedback" role="alert">{error}</p>}{rows.length > 0 && <section className="port-data"><div className="panel-heading"><div><span className="eyebrow">GOOGLE SHEETS · {range}</span><h3>Portfolio</h3></div><button className="secondary-button" type="button" onClick={() => load()} disabled={loading}>↻ Refresh</button></div><div className="port-table-wrap"><table className="port-table"><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`}>{header || `Column ${index + 1}`}</th>)}</tr></thead><tbody>{dataRows.map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, index) => <td key={index}>{row[index] ?? ""}</td>)}</tr>)}</tbody></table></div></section>}{!rows.length && !error && <section className="port-panel"><div className="port-icon">⇄</div><div><span className="eyebrow">GOOGLE SHEETS</span><h3>พร้อมแสดงข้อมูลพอร์ต</h3><p>กดเชื่อมต่อ Google ใน Settings ก่อน แล้วกดโหลดข้อมูลได้เลย ระบบจะใช้ URL ที่ตั้งไว้ใน .env.local อัตโนมัติ</p></div></section>}</div>;
+  const dataRows = tableRows.slice(1).filter((row) => row[0]?.trim().toUpperCase() !== "TOTAL");
+  const totalRow = tableRows.find((row) => row[0]?.trim().toUpperCase() === "TOTAL") ?? [];
+  const summaryRow = tableRows[1] ?? [];
+  const summaryRow = tableRows[1] ?? [];
+  const column = (name: string) => headers.findIndex((header) => header.trim().toUpperCase() === name);
+  const valueAt = (row: string[], name: string) => row[column(name)] ?? "-";
+  const totalValue = (name: string) => name === "VALUE" ? valueAt(summaryRow, "INVESTED(THB)") : name === "PROFIT%" ? valueAt(summaryRow, "ALL PROFIT") : valueAt(totalRow, name);
+  const positive = (value: string) => !value.trim().startsWith("-");
+  return <div className="content port-page"><div className="port-topline"><div><span className="section-kicker">INVESTMENT WORKSPACE</span><h2>Portfolio<br /><em>overview.</em></h2></div><div className="port-status"><span className={loading ? "status-dot syncing" : "status-dot"} />{loading ? "Updating" : updatedAt ? `Updated ${updatedAt}` : "Waiting for data"}<button className="icon-button" onClick={() => void load()} disabled={loading} aria-label="Refresh portfolio">↻</button></div></div>{error && <div className="port-error" role="alert"><strong>เชื่อมต่อข้อมูลไม่สำเร็จ</strong><span>{error}</span></div>}{rows.length > 0 && headers.length > 0 && <><section className="portfolio-metrics"><div><span>INVESTED (THB)</span><strong>{totalValue("VALUE")}</strong><small>Portfolio value</small></div><div><span>INVESTED (USD)</span><strong>{totalValue("VALUE") === "-" ? "-" : "541"}</strong><small>Base currency</small></div><div><span>TOTAL PROFIT</span><strong className={positive(totalValue("PROFIT")) ? "gain" : "loss"}>{totalValue("PROFIT")}</strong><small>Unrealized P/L</small></div><div><span>ALL PROFIT</span><strong className={positive(totalValue("PROFIT%")) ? "gain" : "loss"}>{totalValue("PROFIT%")}</strong><small>Return</small></div></section><section className="portfolio-grid"><div className="port-data"><div className="panel-heading"><div><span className="eyebrow">HOLDINGS · SUMMARIZE</span><h3>Your positions</h3></div><span className="holdings-count">{dataRows.length} assets</span></div><div className="port-table-wrap"><table className="port-table"><thead><tr>{headers.slice(0, 5).map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead><tbody>{dataRows.map((row, rowIndex) => <tr key={rowIndex}><td><strong className="ticker">{row[0] || "-"}</strong></td>{headers.slice(1, 5).map((_, index) => <td key={index}>{row[index + 1] ?? "-"}{index === 3 && <span className={positive(row[index + 1] ?? "") ? "trend up" : "trend down"}>{positive(row[index + 1] ?? "") ? "↗" : "↘"}</span>}</td>)}</tr>)}</tbody></table></div></div><aside className="allocation-card"><div className="panel-heading"><div><span className="eyebrow">ALLOCATION</span><h3>By holding</h3></div></div><div className="allocation-bars">{dataRows.slice(0, 8).map((row, index) => <div className="allocation-row" key={row[0] || index}><div><strong>{row[0]}</strong><span>{valueAt(row, "PERCENT")}</span></div><i><b style={{ width: `${Math.min(100, Number.parseFloat(valueAt(row, "PERCENT")) || 0) * 4.5}%` }} /></i></div>)}</div></aside></section></>}{!rows.length && !error && <section className="port-panel"><div className="port-icon">⇄</div><div><span className="eyebrow">GOOGLE SHEETS</span><h3>กำลังโหลดพอร์ตของคุณ</h3><p>กำลังดึงข้อมูลจาก Summarize ใน Google Sheets</p></div></section>}</div>;
 }
 
 function SettingsView() { return <div className="content"><div className="view-intro compact"><div><span className="section-kicker">WORKSPACE SETTINGS</span><h2>Your data,<br /><em>your place.</em></h2></div></div><IntegrationSettings /><AIStatus /><section className="settings-list"><div><strong>Runtime</strong><span>Pipeline: copy to ChatGPT / agent chat is demo</span></div><div><strong>Storage</strong><span>Browser localStorage · ready for SQLite adapter</span></div><div><strong>AI provider</strong><span>ChatGPT / manual copy & paste</span><button className="secondary-button">Configure later</button></div></section><div className="pipeline-note"><span>i</span><p>This MVP keeps state on this device. The service boundaries are intentionally small so a real provider and SQLite repository can be added without rewriting the UI.</p></div></div>; }
