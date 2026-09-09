@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { agents, getAgent } from "@/lib/agents";
-import { CalendarEvent, calendarTimeZone, dayKey, eventDays, eventDeadline, eventTaskId, monthDays, shiftDay, shiftMonth } from "@/lib/calendar";
+import { CalendarEvent, calendarTimeZone, dayKey, calendarEntries, eventDeadline, eventTaskId, monthDays, shiftDay, shiftMonth } from "@/lib/calendar";
 import type { Subject, Task } from "@/lib/types";
 
-type Entry = { id: string; title: string; first: string; last: string; source: "google" | "task"; done: boolean; event?: CalendarEvent; task?: Task };
+import { TaskContext, TaskControls } from "@/components/task-controls";
+
 type LoadResult = { key: string; events: CalendarEvent[]; error?: string; connect?: boolean };
 type GoogleCalendar = { id: string; name: string; primary: boolean; selected: boolean };
 const weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const dateLabel = (day: string) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" }).format(new Date(`${day}T12:00:00Z`));
 
 export default function DeadlineCalendar({ tasks, subjects, onCreateTask, onAssignAll, onSettings }: { tasks: Task[]; subjects: Subject[]; onCreateTask: (task: Task) => void; onAssignAll: (events: CalendarEvent[]) => void; onSettings: () => void }) {
+  const actions = useContext(TaskContext);
   const today = dayKey(new Date());
   const [month, setMonth] = useState(() => today.slice(0, 7));
   const [selectedDay, setSelectedDay] = useState(today);
@@ -61,13 +63,7 @@ export default function DeadlineCalendar({ tasks, subjects, onCreateTask, onAssi
 
   const events = loading ? [] : result.events;
   const unassignedEvents = events.filter((event) => !tasks.some((task) => task.sourceEventId === event.id));
-  const entries: Entry[] = [
-    ...events.map((event): Entry => {
-      const task = tasks.find((item) => item.sourceEventId === event.id);
-      return { id: `event:${event.id}`, title: event.title, ...eventDays(event), source: "google", done: task?.status === "Done", event, task };
-    }),
-    ...tasks.filter((task) => !events.some((event) => event.id === task.sourceEventId && eventDeadline(event) === task.deadline)).map((task): Entry => ({ id: task.id, title: task.title, first: task.deadline, last: task.deadline, source: "task", done: task.status === "Done", task })),
-  ].sort((a, b) => a.first.localeCompare(b.first) || a.title.localeCompare(b.title));
+  const entries = calendarEntries(tasks, events);
   const visible = entries.filter((entry) => filter === "all" || entry.source === filter || (filter === "task" && entry.task && entry.event && eventDeadline(entry.event) === entry.task.deadline));
   const onDay = (day: string) => visible.filter((entry) => entry.first <= day && entry.last >= day);
   const selected = onDay(selectedDay);
@@ -111,11 +107,11 @@ export default function DeadlineCalendar({ tasks, subjects, onCreateTask, onAssi
       <aside className="calendar-agenda"><div className="agenda-heading"><span className="eyebrow">YOUR DAY, AT A GLANCE</span><h3>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${selectedDay}T12:00:00Z`))}<span>{selected.length} items</span></h3><p>{dateLabel(selectedDay)}</p></div>
         {selected.length === 0 ? <div className="agenda-empty"><span aria-hidden="true">✧</span><h4>A little breathing room.</h4><p>{loading ? "Loading Google events. Your local deadlines are already here." : "No items on this day. Pick another date to see what’s coming."}</p></div> : <div className="agenda-items">{selected.map((entry) => <article key={entry.id} className={`agenda-item ${entry.source}`}><span className="agenda-tag">{entry.source === "google" ? "GOOGLE CALENDAR" : entry.task?.team.toUpperCase()}{entry.done ? " · DONE" : ""}</span><h4>{entry.title}</h4><p className="agenda-time">{entry.event ? entry.event.allDay ? "All day" : new Intl.DateTimeFormat("en-US", { timeZone: calendarTimeZone, hour: "numeric", minute: "2-digit" }).format(new Date(entry.event.start)) : "Deadline"}{entry.first !== entry.last ? ` · ${entry.first} → ${entry.last}` : ""}</p>
           {(entry.event?.description || entry.task?.description) && <p className="agenda-description">{entry.event?.description || entry.task?.description}</p>}
-          {entry.task && <div className="agenda-assigned"><span>{getAgent(entry.task.assignedAgent)?.avatar ?? "🐼"}</span><small>{getAgent(entry.task.assignedAgent)?.name ?? "Panda"} · {entry.task.status}<br />Task due {entry.task.deadline}</small></div>}
+          {entry.task && <TaskControls task={entry.task} />}{entry.task && <div className="agenda-assigned"><span>{getAgent(entry.task.assignedAgent)?.avatar ?? "🐼"}</span><small>{getAgent(entry.task.assignedAgent)?.name ?? "Panda"} · {entry.task.status}<br />Task due {entry.task.deadline}</small></div>}
           {entry.event && !entry.task && <AssignEvent event={entry.event} subjects={subjects} onCreateTask={onCreateTask} />}
           {entry.event?.url && <a className="calendar-google-link" href={entry.event.url} target="_blank" rel="noreferrer">Open in Google Calendar ↗</a>}
         </article>)}</div>}
-        <div className="agenda-note"><span aria-hidden="true">✦</span><p>Pick a Google event and assign it to your team. Its deadline becomes a task you can track.</p></div>
+        <button className="primary-button" onClick={() => actions.create(undefined, selectedDay)}>+ New task</button><div className="agenda-note"><span aria-hidden="true">✦</span><p>Pick a Google event and assign it to your team. Its deadline becomes a task you can track.</p></div>
       </aside>
     </div>
   </div>;

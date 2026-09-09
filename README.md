@@ -139,3 +139,26 @@ Images stay in browser localStorage. Download and attach them in ChatGPT manuall
 3. Copy ChatGPT's answer back into the response field and save it.
 
 History and answers remain in localStorage across reloads. Previous runs remain readable. Pipeline's old POST endpoint returns 410 and never calls OpenAI, including for stale browser tabs. Existing API implementation files are inactive references. ChatGPT usage is governed by the user's ChatGPT plan.
+
+### Shared local tasks
+
+Study, Tasks, Calendar and Today read the same `agent-helper.tasks` collection.
+Tasks keep their existing IDs; `subjectId` links a task to its learning room.
+Optional `focused` and `deletedAt` fields are backward compatible. The original
+stored task JSON is backed up to `agent-helper.tasks.legacy-backup` before the
+first write. Legacy tasks assigned to a known subject ID gain that relationship
+without guessing from names or replacing other fields.
+
+Deletion retains a tombstone, and Undo restores the same record even after a
+reload. Imported Google events represented by local tasks are suppressed,
+including deleted tasks; local changes do not write back to Google Calendar.
+Date-only deadlines stay `YYYY-MM-DD`, and Today uses `Asia/Bangkok` to select
+unfinished overdue, due-today and focused tasks once each. Undated tasks remain
+in Study and All Tasks but do not produce calendar entries.
+
+Run `node --test tests/*.test.mjs`, `npm run lint`, and `npm run build` to verify.
+`tests/tasks.test.mjs` exercises component callbacks with a lightweight hook and
+localStorage harness, including remounts, safe migration and failed writes. It
+does not replace real-browser layout, focus or hydration testing. No dependency
+was added. Storage remains local to this browser; concurrent browser tabs and
+cross-device synchronization are not implemented.

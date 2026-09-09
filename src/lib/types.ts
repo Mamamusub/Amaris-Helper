@@ -26,6 +26,8 @@ export type Task = {
   deadline: string;
   createdAt: string;
   updatedAt: string;
+  focused?: boolean;
+  deletedAt?: string;
   sourceEventId?: string;
   subjectId?: string;
 };

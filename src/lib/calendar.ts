@@ -1,4 +1,17 @@
+import type { Task } from "./types";
+
 export const calendarTimeZone = "Asia/Bangkok";
+
+export type CalendarEntry = { id: string; title: string; first: string; last: string; source: "google" | "task"; done: boolean; event?: CalendarEvent; task?: Task };
+
+export function calendarEntries(tasks: Task[], events: CalendarEvent[]): CalendarEntry[] {
+  // Once imported, the local task owns its title, date and status. Tombstones
+  // also suppress the original event so deleting cannot resurrect an assignment.
+  return [
+    ...events.filter((event) => !tasks.some((task) => task.sourceEventId === event.id)).map((event): CalendarEntry => ({ id: `event:${event.id}`, title: event.title, ...eventDays(event), source: "google", done: false, event })),
+    ...tasks.filter((task) => !task.deletedAt && !!task.deadline).map((task): CalendarEntry => ({ id: task.id, title: task.title, first: task.deadline, last: task.deadline, source: "task", done: task.status === "Done", task })),
+  ].sort((a, b) => a.first.localeCompare(b.first) || a.title.localeCompare(b.title));
+}
 
 export type CalendarEvent = {
   id: string;
