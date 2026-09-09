@@ -41,12 +41,17 @@ export default function LivePipeline({ onCreateTask }: { onCreateTask: (task: Ta
     const requestKey = apiKey;
     setApiKey("");
     try {
-      const response = await fetch("/api/pipeline/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent, command: command.trim(), apiKey: requestKey }), signal: AbortSignal.timeout(95000) });
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 30000);
+      let response: Response;
+      try {
+        response = await fetch("/api/pipeline/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent, command: command.trim(), apiKey: requestKey }), signal: controller.signal });
+      } finally { window.clearTimeout(timeout); }
       const data = await response.json() as { result?: PipelineResult; error?: string };
       if (!response.ok) throw new Error(data.error || "เริ่มงานไม่สำเร็จ");
       setResult(data.result ?? null); setStatus("completed");
     } catch (runError) {
-      setError(runError instanceof Error ? runError.message : "เกิดข้อผิดพลาด กรุณาลองใหม่"); setStatus("failed");
+      setError(runError instanceof DOMException && runError.name === "AbortError" ? "Agent ใช้เวลานานเกิน 30 วินาที กรุณาลองใหม่หรือลดความยาวคำสั่ง" : runError instanceof Error ? runError.message : "เกิดข้อผิดพลาด กรุณาลองใหม่"); setStatus("failed");
     }
   }
 
