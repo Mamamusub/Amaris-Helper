@@ -264,7 +264,7 @@ function AgentWorkspaceV3({ agent, messages, setMessages, onClose, onCreateTask,
 
 function PortView() {
   const [sheet, setSheet] = useState("");
-  const [range, setRange] = useState("PORT!A1:I100");
+  const [range, setRange] = useState("Summarize!A1:I100");
   const [rows, setRows] = useState<string[][]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -280,6 +280,12 @@ function PortView() {
     } catch (loadError) { setError(loadError instanceof Error ? loadError.message : "โหลดข้อมูลไม่สำเร็จ"); }
     finally { setLoading(false); }
   };
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+    // The initial load intentionally uses the initial configured values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const headerIndex = rows.findIndex((row) => row.some((cell) => cell.trim().toUpperCase() === "NAME"));
   const tableRows = headerIndex >= 0 ? rows.slice(headerIndex).filter((row) => row.some((cell) => cell.trim())) : rows.filter((row) => row.some((cell) => cell.trim()));
   const headers = tableRows[0] ?? [];
