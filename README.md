@@ -63,6 +63,8 @@ Use Study > Add subject. The subject is persisted locally and opens as its own s
 
 Copy `.env.example` to `.env.local` when you want a local configuration file. Do not commit `.env.local` or API keys. To enable real replies in individual agent workspaces, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL` in `.env.local`, then restart the dev server. The shared Pipeline remains manual copy/paste.
 
+For the Port page, set `GOOGLE_SHEET_URL` to the Google Sheet URL (or use `GOOGLE_SHEET_ID`) and optionally set `GOOGLE_SHEET_RANGE=PORT!A1:I100`. The Port page then loads that sheet without requiring the URL each time. Reconnect Google after enabling the Sheets API so the read-only Sheets permission is granted.
+
 ## Next implementation steps
 
 1. Replace the localStorage adapter with SQLite and a migration layer.

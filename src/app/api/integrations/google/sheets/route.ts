@@ -1,4 +1,4 @@
-import { accessToken, checkOrigin, failure, IntegrationError, remoteFetch } from "@/lib/integration-server";
+import { accessToken, failure, IntegrationError, remoteFetch } from "@/lib/integration-server";
 
 function spreadsheetId(value: string) {
   const trimmed = value.trim();
@@ -8,10 +8,9 @@ function spreadsheetId(value: string) {
 
 export async function GET(request: Request) {
   try {
-    checkOrigin(request);
     const params = new URL(request.url).searchParams;
-    const id = spreadsheetId(params.get("id") || process.env.GOOGLE_SHEET_ID || "");
-    const range = (params.get("range") || process.env.GOOGLE_SHEET_RANGE || "PORT!A1:E100").trim();
+    const id = spreadsheetId(params.get("id") || process.env.GOOGLE_SHEET_URL || process.env.GOOGLE_SHEET_ID || "");
+    const range = (params.get("range") || process.env.GOOGLE_SHEET_RANGE || "PORT!A1:I100").trim();
     if (!id || !/^[a-zA-Z0-9_-]+$/.test(id) || range.length > 200) throw new IntegrationError("ใส่ Google Sheet ID หรือ URL และช่วงข้อมูลให้ถูกต้อง");
     const token = await accessToken();
     const response = await remoteFetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}/values/${encodeURIComponent(range)}`, { headers: { Authorization: `Bearer ${token}` } });
