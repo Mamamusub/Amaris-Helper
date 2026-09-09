@@ -11,7 +11,7 @@ import { demoMessages, demoSubjects, demoTasks, readStorage, storageKeys, Stored
 import { Agent, AgentRun, ChatMessage, PipelineImage, Subject, Task, Team } from "@/lib/types";
 
 import { TaskContext, TaskControls, TaskEditor } from "@/components/task-controls";
-import { liveTasks, todayTasks, updateTask, migrateTasks } from "@/lib/task-model";
+import { liveTasks, todayTasks, updateTask, migrateTasks, sortTasksByDeadline } from "@/lib/task-model";
 import { dayKey, calendarTimeZone } from "@/lib/calendar";
 
 import AccountBoundary, { useCloud, useCloudSnapshot } from "@/components/account-boundary";
@@ -124,7 +124,7 @@ function LoadedAppShell() {
 }
 
 function Sidebar({ view, setView, taskCount }: { view: View; setView: (view: View) => void; taskCount: number }) {
-  return <aside className="sidebar"><div className="brand"><div className="brand-mark">✦</div><div><strong>Amaris</strong><span>Pai&apos;s AI team</span></div></div><div className="workspace-switcher"><span className="mini-mark">P</span><div><strong>Pai&apos;s workspace</strong><small>Local workspace</small></div><span className="chevron">⌄</span></div><nav aria-label="Main navigation">{navItems.map((item) => <button type="button" key={item.id} className={view === item.id ? "nav-item active" : "nav-item"} aria-current={view === item.id ? "page" : undefined} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}{item.id === "tasks" && <b>{taskCount}</b>}</button>)}</nav><div className="sidebar-footer"><button type="button" className="nav-item" onClick={() => setView("settings")}><span>⚙</span>Settings</button><div className="local-badge"><span className="status-dot" /><div><strong>Local-first</strong><small>Tasks saved here</small></div></div></div></aside>;
+  return <aside className="sidebar"><div className="brand"><div className="brand-mark">✦</div><div><strong>Amaris</strong><span>Pai&apos;s AI team</span></div></div><div className="workspace-switcher"><span className="mini-mark">P</span><div><strong>Pai&apos;s workspace</strong><small>Local workspace</small></div><span className="chevron">⌄</span></div><nav aria-label="Main navigation">{navItems.map((item) => <button type="button" key={item.id} className={view === item.id ? "nav-item active" : "nav-item"} aria-current={view === item.id ? "page" : undefined} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}{item.id === "tasks" && <b>{taskCount}</b>}</button>)}</nav><div className="sidebar-footer"><div className="local-badge"><span className="status-dot" /><div><strong>Local-first</strong><small>Tasks saved here</small></div></div></div></aside>;
 }
 
 function Dashboard({ tasks, runs, onRoute, onOpenAgent, onViewTasks }: { onViewTasks: () => void; tasks: Task[]; runs: AgentRun[]; onRoute: (request: string) => void; onOpenAgent: (agent: Agent) => void }) {
@@ -171,7 +171,7 @@ function TaskTimelineView({ tasks }: { tasks: Task[] }) {
   const actions = useContext(TaskContext);
   const [filter, setFilter] = useState<TaskFilter>("All Tasks");
   const countFor = (item: TaskFilter) => item === "All Tasks" ? tasks.length : tasks.filter((task) => { if (task.status === "Done") return false; const [start, end] = taskRange(item); return task.deadline >= start && task.deadline < end; }).length;
-  const shown = filter === "All Tasks" ? tasks : tasks.filter((task) => { if (task.status === "Done") return false; const [start, end] = taskRange(filter); return task.deadline >= start && task.deadline < end; });
+  const shown = sortTasksByDeadline(filter === "All Tasks" ? tasks : tasks.filter((task) => { if (task.status === "Done") return false; const [start, end] = taskRange(filter); return task.deadline >= start && task.deadline < end; }));
   return <div className="content"><div className="view-intro compact"><div><span className="section-kicker">SHARED TASK SYSTEM</span><h2>Keep the promises<br /><em>visible.</em></h2></div><button className="primary-button" onClick={() => actions.create()}>+ New task</button></div><div className="tabs">{(["This week", "Next week", "Next month", "All Tasks"] as const).map((item) => <button className={filter === item ? "tab active" : "tab"} key={item} onClick={() => setFilter(item)}>{item}<span>{countFor(item)}</span></button>)}</div><section className="task-table">{shown.map((task) => <div className="task-table-row" key={task.id}><button className={`checkbox ${task.status === "Done" ? "checked" : ""}`} aria-label={`Mark ${task.title} ${task.status === "Done" ? "pending" : "done"}`} onClick={() => actions.update(task.id, { status: task.status === "Done" ? "Planned" : "Done" })}>{task.status === "Done" ? "✓" : ""}</button><div className="task-info"><strong>{task.title}</strong><small>{task.description}</small></div><span className="task-team">{task.team}</span><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><span className="task-deadline">{task.deadline}</span><TaskIntegrations task={task} /><TaskControls task={task} /></div>)}{shown.length === 0 && <div className="empty-state">Nothing here yet. A clear surface can be a useful thing.</div>}</section></div>;
 }
 
