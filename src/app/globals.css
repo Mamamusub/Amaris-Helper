@@ -66,6 +66,19 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .port-icon { width:58px; height:58px; display:grid; place-items:center; flex:none; border-radius:14px; background:#e8eddc; color:var(--olive); font-size:30px; }
 .port-panel h3 { margin:8px 0 6px; font-size:20px; }
 .port-panel p { margin:0 0 16px; color:var(--muted); font-size:13px; line-height:1.7; }
+.port-connect { display:flex; align-items:flex-end; gap:12px; margin-bottom:20px; padding:18px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+.port-connect label { display:grid; gap:6px; flex:1; color:var(--muted); font-size:12px; }
+.port-connect input { width:100%; border:1px solid var(--line); border-radius:8px; padding:10px; background:#f8faf4; color:var(--ink); font-size:13px; }
+.port-data { overflow:hidden; border:1px solid var(--line); border-radius:14px; background:#fff; }
+.port-data .panel-heading { padding:20px; }
+.port-table-wrap { overflow:auto; }
+.port-table { width:100%; min-width:650px; border-collapse:collapse; font-size:13px; }
+.port-table th { background:#f1f5e8; color:var(--ink); font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
+.port-table th, .port-table td { padding:11px 14px; border:1px solid var(--line); text-align:right; white-space:nowrap; }
+.port-table th:first-child, .port-table td:first-child { text-align:left; }
+.port-table tbody tr:first-child td { font-weight:700; }
+.port-table tbody tr:hover { background:#fafcf7; }
+@media(max-width:620px){.port-connect{align-items:stretch;flex-direction:column}.port-connect button{width:100%}.port-panel{align-items:flex-start;padding:20px}.port-data .panel-heading{align-items:flex-start;gap:12px;flex-direction:column}}
 
 /* Shared task controls inherit the workspace palette and buttons. */
 .shared-task-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; }

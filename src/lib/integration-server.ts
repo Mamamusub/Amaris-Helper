@@ -21,7 +21,8 @@ export const stateCookie = "pai-google-state";
 export const calendarScope = "https://www.googleapis.com/auth/calendar.events.owned";
 export const calendarReadScope = "https://www.googleapis.com/auth/calendar.events.readonly";
 export const calendarListScope = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
-export const googleScopes = [calendarScope, calendarReadScope, calendarListScope].join(" ");
+export const googleSheetsScope = "https://www.googleapis.com/auth/spreadsheets.readonly";
+export const googleScopes = [calendarScope, calendarReadScope, calendarListScope, googleSheetsScope].join(" ");
 const configuredOrigin = () => process.env.APP_ORIGIN?.trim() ? new URL(process.env.APP_ORIGIN).origin : null;
 const requestOrigin = (request?: Request) => {
   if (!request) return null;
