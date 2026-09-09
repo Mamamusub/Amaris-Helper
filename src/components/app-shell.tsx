@@ -20,6 +20,8 @@ import SubjectNotes from "@/components/subject-notes";
 
 import FocusAssignments from "@/components/focus-assignments";
 
+import RecurringTasks from "@/components/recurring-tasks";
+
 type View = "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "career" | "development" | "settings";
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "Today", icon: "⌂" }, { id: "teams", label: "Team grid", icon: "◈" }, { id: "pipeline", label: "Pipeline", icon: "⌁" }, { id: "tasks", label: "Tasks", icon: "✓" }, { id: "calendar", label: "Calendar", icon: "▦" }, { id: "study", label: "Study", icon: "✦" }, { id: "career", label: "Career", icon: "↗" }, { id: "development", label: "Build lab", icon: "⌘" }, { id: "settings", label: "Settings", icon: "⚙" },
@@ -106,7 +108,7 @@ function LoadedAppShell() {
   };
   return <TaskContext.Provider value={{ subjects, update, create, edit: (task) => { setEditorVersion(cloud?.version("task", task.id) ?? 0); setEditor(task); }, openSubject, remove: (id) => { if (commitTasks(updateTask(storedTasks, id, { deletedAt: new Date().toISOString() }))) setUndoIds((ids) => [...ids, id]); } }}><div className="app-frame">
     <Sidebar view={view} setView={setView} taskCount={tasks.filter((task) => task.status !== "Done").length} />
-    <main className="main-stage"><CalendarReturnNotice onSettings={() => setView("settings")} />
+    <main className="main-stage"><RecurringTasks tasks={storedTasks} showButton={view === "tasks"} save={(additions) => { if (cloud) cloud.import(additions.map((task) => ({ kind: "task", id: task.id, data: { ...task }, version: 0 }))); else commitTasks([...additions, ...storedTasks]); }} /><CalendarReturnNotice onSettings={() => setView("settings")} />
       <header className="topbar"><div><span className="eyebrow">PERSONAL AI TEAM / AMARIS</span><h1>{view === "dashboard" ? "Good morning, Pai." : (view === "settings" ? "Settings" : navItems.find((item) => item.id === view)?.label)}</h1></div><div className="topbar-actions"><span className="status-dot" /> <span className="muted">Personal workspace</span><button className="avatar-button" aria-label="Pai profile">P</button></div></header>
       {saveError && <div className="notice" role="alert">{saveError}</div>}
       {!!undoIds.length && <div className="notice" role="status">Task deleted <button onClick={() => { const id = undoIds[undoIds.length - 1]; if (commitTasks(updateTask(storedTasks, id, { deletedAt: undefined }))) setUndoIds((ids) => ids.slice(0, -1)); }}>Undo</button></div>}
