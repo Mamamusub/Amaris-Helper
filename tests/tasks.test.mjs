@@ -36,6 +36,7 @@ function harness() {
     const stub = () => null;
     const importModule = (name) => {
       if (name === "react") return react;
+      if (name.endsWith("account-boundary")) return { default: ({ children }) => children, useCloud: () => null, useCloudSnapshot: () => null };
       if (/components\/(pipeline-view|integrations)/.test(name)) return { default: stub, AIStatus: stub, CalendarReturnNotice: stub, IntegrationSettings: stub, TaskIntegrations: stub };
       if (name.endsWith("use-pipeline")) return { usePipeline: () => ({ runs: [], start: stub, saveResponse: stub }) };
       if (name.startsWith("@/") || name.startsWith(".")) {
@@ -54,7 +55,7 @@ function harness() {
     if (Array.isArray(element)) return element.map((item, index) => walk(item, `${at}/${item?.key ?? index}`));
     if (typeof element !== "object") return element;
     const { type, props, key } = element;
-    at += `/${key ?? (typeof type === "function" ? type.name : type)}`;
+    at += `/${key ?? (typeof type === "function" ? type.name : String(type))}`;
     if (type?.context) { type.context.value = props.value; return walk(props.children, at); }
     if (typeof type === "function") { position = at; slot = 0; return walk(type(props), at); }
     return { type, props, children: walk(props.children, at) };

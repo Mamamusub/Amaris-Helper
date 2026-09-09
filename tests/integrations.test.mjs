@@ -11,13 +11,14 @@ const jar = new Map();
 const cookieStore = { get: (key) => jar.has(key) ? { value: jar.get(key) } : undefined, set: (key, value) => jar.set(key, value), delete: (key) => jar.delete(key) };
 const env = { ...process.env, APP_ORIGIN: "http://localhost:3000", GOOGLE_CLIENT_ID: "test-id", GOOGLE_CLIENT_SECRET: "test-client-secret", INTEGRATION_SECRET: "x".repeat(64) };
 let mockFetch;
+let accountId = null;
 const cache = new Map();
 function load(relativePath) {
   if (cache.has(relativePath)) return cache.get(relativePath);
   const source = fs.readFileSync(path.join(import.meta.dirname, "..", relativePath), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const testModule = { exports: {} };
-  const context = { module: testModule, exports: testModule.exports, Buffer, URL, URLSearchParams, Request, Response, AbortSignal, process: { env }, fetch: (...args) => mockFetch(...args), require: (name) => name === "next/headers" ? { cookies: async () => cookieStore } : name === "@/lib/integration-server" ? load("src/lib/integration-server.ts") : nodeRequire(name) };
+  const context = { module: testModule, exports: testModule.exports, Buffer, URL, URLSearchParams, Request, Response, AbortSignal, process: { env }, fetch: (...args) => mockFetch(...args), require: (name) => name === "./auth-server" ? { authConfigured: () => !!accountId, verifiedAccount: async () => ({ user: accountId ? { id: accountId } : null }) } : name === "next/headers" ? { cookies: async () => cookieStore } : name === "@/lib/integration-server" ? load("src/lib/integration-server.ts") : nodeRequire(name) };
   vm.runInNewContext(compiled, context, { filename: relativePath });
   cache.set(relativePath, testModule.exports);
   return testModule.exports;
@@ -25,7 +26,7 @@ function load(relativePath) {
 const helpers = load("src/lib/integration-server.ts");
 const task = { id: "task-1", title: "Review notes", description: "@everyone study", deadline: "2026-12-31", team: "Study", priority: "High" };
 const request = (body = task, origin = env.APP_ORIGIN) => new Request(`${env.APP_ORIGIN}/api/integrations`, { method: "POST", headers: { origin, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-beforeEach(() => { jar.clear(); mockFetch = () => { throw new Error("Unexpected external request"); }; });
+beforeEach(() => { accountId = null; jar.clear(); mockFetch = () => { throw new Error("Unexpected external request"); }; });
 
 test("encrypted credentials round-trip and reject tampering", () => {
   const sealed = helpers.seal("private-refresh-token");
@@ -196,4 +197,25 @@ test("events use the selected Classroom calendar and distinct import IDs", async
   assert.equal(events[0].calendarId, calendarId);
   assert.notEqual(events[0].id, "assignment-1");
   assert.equal(events[0].start, "2026-09-08");
+});
+
+test("Calendar credentials are bound to the verified login account", async () => {
+  accountId = "alice";
+  jar.set(helpers.googleCookie, helpers.seal(JSON.stringify({ owner: "alice", refresh: "alice-refresh" })));
+  assert.equal(await helpers.calendarRefresh(), "alice-refresh");
+  accountId = "bob"; assert.equal(await helpers.calendarRefresh(), null);
+  accountId = null; assert.equal(await helpers.calendarRefresh(), null);
+  jar.set(helpers.googleCookie, helpers.seal("legacy-local-refresh"));
+  assert.equal(await helpers.calendarRefresh(), "legacy-local-refresh");
+  accountId = "alice"; assert.equal(await helpers.calendarRefresh(), null);
+});
+
+test("Calendar callback rejects an account switch during consent", async () => {
+  accountId = "bob";
+  jar.set(helpers.stateCookie, "valid-state");
+  jar.set("pai-google-owner", helpers.seal("alice"));
+  const route = load("src/app/api/integrations/google/callback/route.ts");
+  const result = await route.GET(new Request(`${env.APP_ORIGIN}/api/integrations/google/callback?state=valid-state&code=test`));
+  assert.match(result.headers.get("location"), /calendar=failed/);
+  assert.equal(jar.has(helpers.googleCookie), false);
 });

@@ -1,11 +1,11 @@
 import { cookies } from "next/headers";
-import { checkOrigin, failure, googleCookie, remoteFetch, unseal } from "@/lib/integration-server";
+import { checkOrigin, failure, googleCookie, remoteFetch, calendarRefresh } from "@/lib/integration-server";
 
 export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const jar = await cookies();
-    const token = unseal(jar.get(googleCookie)?.value);
+    const token = await calendarRefresh();
     jar.delete(googleCookie);
     let revoked = !token;
     if (token) {

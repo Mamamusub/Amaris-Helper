@@ -1,11 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { appOrigin, callbackUrl, googleScopes, checkOrigin, cookieOptions, failure, googleConfigured, IntegrationError, stateCookie } from "@/lib/integration-server";
+import { appOrigin, calendarOwner, seal, callbackUrl, googleScopes, checkOrigin, cookieOptions, failure, googleConfigured, IntegrationError, stateCookie } from "@/lib/integration-server";
 
 export async function POST(request: Request) {
   try {
     checkOrigin(request);
     if (!googleConfigured()) throw new IntegrationError("Set up Google Calendar in .env.local first.", 503);
+    const owner = await calendarOwner();
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY && process.env.APP_ORIGIN && !owner) throw new IntegrationError("เข้าสู่ระบบด้วย Google ก่อนเชื่อม Google Calendar", 401);
+    (await cookies()).set("pai-google-owner", seal(owner ?? "local"), { ...cookieOptions(request), maxAge: 600 });
     const state = randomBytes(32).toString("base64url");
     (await cookies()).set(stateCookie, state, { ...cookieOptions(request), maxAge: 600 });
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");

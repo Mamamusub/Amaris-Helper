@@ -1,6 +1,21 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 
+import { authConfigured, verifiedAccount } from "./auth-server";
+export { authConfigured } from "./auth-server";
+
+export async function calendarOwner() {
+  if (!authConfigured()) return null;
+  return (await verifiedAccount()).user?.id ?? null;
+}
+export async function calendarRefresh() {
+  const raw = unseal((await cookies()).get(googleCookie)?.value);
+  if (!raw) return null;
+  const owner = await calendarOwner();
+  if (authConfigured() && !owner) return null;
+  if (!raw.startsWith("{")) return owner ? null : raw;
+  try { const saved = JSON.parse(raw); return saved.owner === owner && typeof saved.refresh === "string" ? saved.refresh : null; } catch { return null; }
+}
 export const googleCookie = "pai-google";
 export const stateCookie = "pai-google-state";
 export const calendarScope = "https://www.googleapis.com/auth/calendar.events.owned";
@@ -74,7 +89,7 @@ export async function googleToken(params: Record<string, string>) {
 
 export async function accessToken() {
   const jar = await cookies();
-  const refresh = unseal(jar.get(googleCookie)?.value);
+  const refresh = await calendarRefresh();
   if (!refresh) throw new IntegrationError("Connect Google Calendar in Settings first.", 401);
   try {
     return (await googleToken({ grant_type: "refresh_token", refresh_token: refresh })).access_token;

@@ -72,3 +72,9 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .task-editor input:not([type=checkbox]), .task-editor textarea, .task-editor select { width: 100%; border: 1px solid var(--line, #deded5); border-radius: 10px; background: var(--surface, #fff); color: inherit; padding: 10px; font: inherit; }
 .task-editor textarea { min-height: 90px; resize: vertical; }
 .subject-task { padding: 16px; border-bottom: 1px solid var(--line, #deded5); }
+
+.account-bar, .sync-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 24px; background: #f4f6ed; border-bottom: 1px solid var(--line); font-size: 13px; }
+.account-bar .text-button, .sync-bar .text-button, .subject-notes .text-button { color: var(--olive); margin: 0; }
+.sync-bar > div { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; width: 100%; }
+.subject-notes { margin: 12px 0 24px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
+.subject-notes textarea { width: 100%; min-height: 120px; padding: 12px; font: inherit; border: 1px solid var(--line); border-radius: 8px; }

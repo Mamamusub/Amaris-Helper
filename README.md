@@ -12,7 +12,7 @@ Pai's local-first personal AI team for university, internship preparation, perso
 - Tasks view with Today, Upcoming, All Tasks, priorities, deadlines, and completion.
 - Study dashboard with configurable subjects and subject-specific workspaces.
 - Career and Development team views.
-- Browser persistence through localStorage, with a small storage adapter ready to move to SQLite.
+- Browser persistence through localStorage for Local mode, with optional Supabase Auth/Postgres account sync.
 - Manual ChatGPT prompt preparation, image downloads, and saved pasted answers. The former API provider is inactive.
 
 ## Run it
@@ -96,9 +96,26 @@ Events load from Google when you open Calendar, change months, or refresh. Assig
 
 If Google is not connected or cannot load, local deadlines remain visible with a connection/retry prompt. No sample Google events are presented as live data.
 
+### Google Login and cross-device sync
+
+The implementation and external setup checklist are in [docs/google-login-sync.md](docs/google-login-sync.md).
+The app uses Supabase Google OAuth for identity and server-side `workspace_snapshot` / `workspace_apply`
+RPCs for account data. RLS binds records to the verified `auth.uid()`. Login and Calendar use separate callbacks:
+
+- Login: `/api/auth/callback`
+- Calendar: `/api/integrations/google/callback`
+
+Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `APP_ORIGIN` on the server. Run the workspace migration
+on a development Supabase project before enabling Login. No production deployment or production database
+change is performed by this repository work.
+
+Local mode remains available when Supabase is not configured. On first login, the UI offers an explicit
+local-data import with counts; untouched demo records are excluded and the original local data remains.
+
 ### Local setup
 
-This version is a personal localhost app with no user authentication. Keep it on localhost; add authentication and per-user credentials before exposing these endpoints on a public server. Start locally with `npm run dev -- --hostname 127.0.0.1` and open `http://localhost:3000`.
+Start locally with `npm run dev -- --hostname 127.0.0.1` and open `http://localhost:3000`. For account sync,
+complete the Supabase setup in `docs/google-login-sync.md`; otherwise the app stays in Local mode.
 
 Copy `.env.example` to `.env.local` and fill in the integration values. Leave unused providers blank. Never put credentials in `NEXT_PUBLIC_` variables or browser storage. Restart the dev server after changing environment variables.
 

@@ -14,6 +14,10 @@ import { TaskContext, TaskControls, TaskEditor } from "@/components/task-control
 import { liveTasks, todayTasks, updateTask, migrateTasks } from "@/lib/task-model";
 import { dayKey, calendarTimeZone } from "@/lib/calendar";
 
+import AccountBoundary, { useCloud, useCloudSnapshot } from "@/components/account-boundary";
+
+import SubjectNotes from "@/components/subject-notes";
+
 type View = "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "career" | "development" | "settings";
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "Today", icon: "⌂" }, { id: "teams", label: "Team grid", icon: "◈" }, { id: "pipeline", label: "Pipeline", icon: "⌁" }, { id: "tasks", label: "Tasks", icon: "✓" }, { id: "calendar", label: "Calendar", icon: "▦" }, { id: "study", label: "Study", icon: "✦" }, { id: "career", label: "Career", icon: "↗" }, { id: "development", label: "Build lab", icon: "⌘" },
@@ -25,32 +29,41 @@ const subscribeReady = () => () => {};
 
 export default function AppShell() {
   const ready = useSyncExternalStore(subscribeReady, () => true, () => false);
-  return ready ? <LoadedAppShell /> : null;
+  return ready ? <AccountBoundary><LoadedAppShell /></AccountBoundary> : null;
 }
 
 function LoadedAppShell() {
+  const cloud = useCloud();
+  const synced = useCloudSnapshot();
   const [view, setView] = useState<View>("dashboard");
-  const [storedTasks, setTasks] = useState<Task[]>(() => migrateTasks(readStorage(storageKeys.tasks, demoTasks), readStorage(storageKeys.subjects, demoSubjects)));
+  const [localTasks, setTasks] = useState<Task[]>(() => cloud ? [] : migrateTasks(readStorage(storageKeys.tasks, demoTasks), readStorage(storageKeys.subjects, demoSubjects)));
+  const storedTasks = synced?.data.tasks ?? localTasks;
   const tasks = liveTasks(storedTasks);
+  const [editorVersion, setEditorVersion] = useState(0);
   const [editor, setEditor] = useState<Task | null>(null);
   const [undoIds, setUndoIds] = useState<string[]>(() => storedTasks.filter((task) => task.deletedAt).sort((a, b) => a.deletedAt!.localeCompare(b.deletedAt!)).map((task) => task.id));
   const [subjectId, setSubjectId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState("");
-  const [subjects, setSubjects] = useState<Subject[]>(() => readStorage(storageKeys.subjects, demoSubjects));
-  const [messages, setMessages] = useState<StoredMessages>(() => readStorage(storageKeys.messages, demoMessages));
+  const [localSubjects, setSubjects] = useState<Subject[]>(() => cloud ? [] : readStorage(storageKeys.subjects, demoSubjects));
+  const [localMessages, setLocalMessages] = useState<StoredMessages>(() => cloud ? {} : readStorage(storageKeys.messages, demoMessages));
+  const subjects = synced?.data.subjects ?? localSubjects;
+  const messages = synced?.data.messages ?? localMessages;
+  const setMessages = (next: StoredMessages) => { const merged = { ...messages, ...next }; if (cloud) return cloud.enqueue("thread", merged); writeStorage(storageKeys.messages, merged); setLocalMessages(merged); return true; };
   const { runs, storageError, start: startPipeline, saveResponse } = usePipeline();
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [notice, setNotice] = useState("");
 
-  useEffect(() => { writeStorage(storageKeys.messages, messages); }, [messages]);
+
 
 
   const openAgent = (agent: Agent) => setSelectedAgent(agent);
-  const commitTasks = (next: Task[]) => {
+  const commitTasks = (next: Task[], expected?: Record<string, number>) => {
+    if (cloud) return cloud.enqueue("task", next, expected);
     try { const original = window.localStorage.getItem(storageKeys.tasks); if (original && !window.localStorage.getItem(`${storageKeys.tasks}.legacy-backup`)) window.localStorage.setItem(`${storageKeys.tasks}.legacy-backup`, original); writeStorage(storageKeys.tasks, next); setTasks(next); setSaveError(""); return true; }
     catch { setSaveError("Could not save tasks. Free browser storage and try again."); return false; }
   };
   const commitSubjects = (next: Subject[]) => {
+    if (cloud) return cloud.enqueue("subject", next);
     try { writeStorage(storageKeys.subjects, next); setSubjects(next); setSaveError(""); return true; }
     catch { setSaveError("Could not save subjects. Free browser storage and try again."); return false; }
   };
@@ -58,6 +71,7 @@ function LoadedAppShell() {
   const update = (id: string, patch: Partial<Task>) => { commitTasks(updateTask(storedTasks, id, patch)); };
   const create = (subjectId?: string, deadline = "", focused = false) => {
     const now = new Date().toISOString();
+    setEditorVersion(0);
     setEditor({ id: crypto.randomUUID(), title: "", description: "", subjectId, deadline, focused, team: subjectId ? "Study" : "Orchestrator", assignedAgent: subjectId ?? "secretary", status: "Planned", priority: "Medium", createdAt: now, updatedAt: now });
   };
   const openSubject = (id: string) => { setSubjectId(id); setSelectedAgent(null); setView("study"); };
@@ -87,7 +101,7 @@ function LoadedAppShell() {
     setView("pipeline");
     return started;
   };
-  return <TaskContext.Provider value={{ subjects, update, create, edit: setEditor, openSubject, remove: (id) => { if (commitTasks(updateTask(storedTasks, id, { deletedAt: new Date().toISOString() }))) setUndoIds((ids) => [...ids, id]); } }}><div className="app-frame">
+  return <TaskContext.Provider value={{ subjects, update, create, edit: (task) => { setEditorVersion(cloud?.version("task", task.id) ?? 0); setEditor(task); }, openSubject, remove: (id) => { if (commitTasks(updateTask(storedTasks, id, { deletedAt: new Date().toISOString() }))) setUndoIds((ids) => [...ids, id]); } }}><div className="app-frame">
     <Sidebar view={view} setView={setView} taskCount={tasks.filter((task) => task.status !== "Done").length} />
     <main className="main-stage"><CalendarReturnNotice onSettings={() => setView("settings")} />
       <header className="topbar"><div><span className="eyebrow">PERSONAL AI TEAM / AMARIS</span><h1>{view === "dashboard" ? "Good morning, Pai." : (view === "settings" ? "Settings" : navItems.find((item) => item.id === view)?.label)}</h1></div><div className="topbar-actions"><span className="status-dot" /> <span className="muted">Personal workspace</span><button className="avatar-button" aria-label="Pai profile">P</button></div></header>
@@ -105,7 +119,7 @@ function LoadedAppShell() {
       {view === "settings" && <SettingsView />}
     </main>
     {selectedAgent && <AgentWorkspaceV3 agent={selectedAgent} messages={messages[selectedAgent.id] ?? []} setMessages={setMessages} onClose={() => setSelectedAgent(null)} onCreateTask={(task) => addTask({ ...task, subjectId: subjects.some((subject) => subject.id === selectedAgent.id) ? selectedAgent.id : task.subjectId })} onRoute={routeRequest} />}
-    {editor && <TaskEditor key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task) => { const next = storedTasks.some((item) => item.id === task.id) ? updateTask(storedTasks, task.id, task) : [task, ...storedTasks]; if (commitTasks(next)) setEditor(null); }} />}
+    {editor && <TaskEditor key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task) => { const next = storedTasks.some((item) => item.id === task.id) ? updateTask(storedTasks, task.id, task) : [task, ...storedTasks]; if (commitTasks(next, { [task.id]: editorVersion })) setEditor(null); }} />}
   </div></TaskContext.Provider>;
 }
 
@@ -147,7 +161,7 @@ function taskRange(filter: Exclude<TaskFilter, "All Tasks">) {
   const reference = new Date(`${dayKey(new Date())}T12:00:00Z`);
   const mondayOffset = (reference.getUTCDay() + 6) % 7;
   const thisMonday = addDays(reference, -mondayOffset);
-  if (filter === "This week") return [dateOnly(thisMonday), dateOnly(addDays(thisMonday, 7))];
+  if (filter === "This week") return [dateOnly(reference), dateOnly(addDays(thisMonday, 7))];
   if (filter === "Next week") { const nextMonday = addDays(thisMonday, 7); return [dateOnly(nextMonday), dateOnly(addDays(nextMonday, 7))]; }
   const nextMonth = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 1));
   return [dateOnly(nextMonth), dateOnly(new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + 1, 1)))];
@@ -163,12 +177,12 @@ function TaskTimelineView({ tasks }: { tasks: Task[] }) {
 
 void TasksView;
 
-function StudyAssignmentsView({ subjects, setSubjects, tasks, onOpenAgent, selectedSubjectId }: { selectedSubjectId: string | null; subjects: Subject[]; setSubjects: (subjects: Subject[]) => void; tasks: Task[]; onOpenAgent: (agent: Agent) => void }) {
+function StudyAssignmentsView({ subjects, setSubjects, tasks, onOpenAgent, selectedSubjectId }: { selectedSubjectId: string | null; subjects: Subject[]; setSubjects: (subjects: Subject[]) => boolean; tasks: Task[]; onOpenAgent: (agent: Agent) => void }) {
   const actions = useContext(TaskContext);
   const selectedSubject = subjects.find((subject) => subject.id === selectedSubjectId);
   const [newSubject, setNewSubject] = useState("");
   const addSubject = (event: FormEvent) => { event.preventDefault(); if (!newSubject.trim()) return; setSubjects([...subjects, { id: `subject-${Date.now()}`, name: newSubject.trim(), color: "#9ee7d4", nextEvent: "No exam date", context: "New subject context. Add notes in its workspace." }]); setNewSubject(""); };
-  return <div className="content"><div className="view-intro compact"><div><span className="section-kicker">STUDY TEAM / YOUR SUBJECTS</span><h2>Learn with<br /><em>context.</em></h2></div><button className="secondary-button" onClick={() => onOpenAgent(getAgent("researcher")!)}>Ask Owl ↗</button></div><div className="study-overview"><div className="study-stat"><span>UPCOMING EXAMS</span><strong>{subjects.length === 1 ? "1" : subjects.length}</strong><small>Keep dates close</small></div><div className="study-stat"><span>OPEN ASSIGNMENTS</span><strong>{tasks.filter((task) => task.subjectId && task.status !== "Done").length}</strong><small>Across your subjects</small></div><div className="study-stat highlight"><span>NEXT SUGGESTION</span><strong>25 min</strong><small>Review integration notes</small></div></div><section className="subject-section"><div className="panel-heading"><div><span className="eyebrow">SUBJECT AGENTS</span><h3>Your learning rooms</h3></div></div><div className="subject-grid">{subjects.map((subject) => { const assignments = subjectAssignments(subject, tasks).filter((task) => task.status !== "Done"); const nextAssignment = assignments.filter((task) => task.deadline).sort((a, b) => a.deadline.localeCompare(b.deadline))[0]; return <button className="subject-card" key={subject.id} onClick={() => actions.openSubject(subject.id)}><div className="subject-icon" style={{ background: subject.color }}>{subject.name.slice(0, 2).toUpperCase()}</div><h4>{subject.name}</h4><p>{subject.context}</p><span>{nextAssignment ? `${assignments.length} assignment${assignments.length === 1 ? "" : "s"} · Next ${nextAssignment.deadline}` : `${assignments.length} open assignments`} <b>↗</b></span></button>; })}<form className="add-subject" onSubmit={addSubject}><span>+</span><strong>Add subject</strong><input value={newSubject} onChange={(event) => setNewSubject(event.target.value)} placeholder="e.g. Digital logic" aria-label="New subject name" /><button type="submit">Create ↗</button></form></div></section>{selectedSubject && <section className="panel"><div className="panel-heading"><h3>{selectedSubject.name}</h3><button className="secondary-button" onClick={() => onOpenAgent({ id: selectedSubject.id, name: selectedSubject.name, team: "Study", role: "Subject specialist", avatar: selectedSubject.name.slice(0, 2).toUpperCase(), color: selectedSubject.color, description: selectedSubject.context, capabilities: ["Explain concepts", "Practice questions", "Exam review"], status: "online" })}>Open study room</button><button className="primary-button" onClick={() => actions.create(selectedSubject.id)}>+ New task</button></div>{subjectAssignments(selectedSubject, tasks).map((task) => <div className="subject-task" key={task.id}><TaskRow task={task} index={0} /><p>{task.description}</p><small>{task.status}</small><TaskControls task={task} /></div>)}{!subjectAssignments(selectedSubject, tasks).length && <p className="empty-state">No assignments yet.</p>}</section>}</div>;
+  return <div className="content"><div className="view-intro compact"><div><span className="section-kicker">STUDY TEAM / YOUR SUBJECTS</span><h2>Learn with<br /><em>context.</em></h2></div><button className="secondary-button" onClick={() => onOpenAgent(getAgent("researcher")!)}>Ask Owl ↗</button></div><div className="study-overview"><div className="study-stat"><span>UPCOMING EXAMS</span><strong>{subjects.length === 1 ? "1" : subjects.length}</strong><small>Keep dates close</small></div><div className="study-stat"><span>OPEN ASSIGNMENTS</span><strong>{tasks.filter((task) => task.subjectId && task.status !== "Done").length}</strong><small>Across your subjects</small></div><div className="study-stat highlight"><span>NEXT SUGGESTION</span><strong>25 min</strong><small>Review integration notes</small></div></div><section className="subject-section"><div className="panel-heading"><div><span className="eyebrow">SUBJECT AGENTS</span><h3>Your learning rooms</h3></div></div><div className="subject-grid">{subjects.map((subject) => { const assignments = subjectAssignments(subject, tasks).filter((task) => task.status !== "Done"); const nextAssignment = assignments.filter((task) => task.deadline).sort((a, b) => a.deadline.localeCompare(b.deadline))[0]; return <button className="subject-card" key={subject.id} onClick={() => actions.openSubject(subject.id)}><div className="subject-icon" style={{ background: subject.color }}>{subject.name.slice(0, 2).toUpperCase()}</div><h4>{subject.name}</h4><p>{subject.context}</p><span>{nextAssignment ? `${assignments.length} assignment${assignments.length === 1 ? "" : "s"} · Next ${nextAssignment.deadline}` : `${assignments.length} open assignments`} <b>↗</b></span></button>; })}<form className="add-subject" onSubmit={addSubject}><span>+</span><strong>Add subject</strong><input value={newSubject} onChange={(event) => setNewSubject(event.target.value)} placeholder="e.g. Digital logic" aria-label="New subject name" /><button type="submit">Create ↗</button></form></div></section>{selectedSubject && <section className="panel"><div className="panel-heading"><h3>{selectedSubject.name}</h3><button className="secondary-button" onClick={() => onOpenAgent({ id: selectedSubject.id, name: selectedSubject.name, team: "Study", role: "Subject specialist", avatar: selectedSubject.name.slice(0, 2).toUpperCase(), color: selectedSubject.color, description: selectedSubject.context, capabilities: ["Explain concepts", "Practice questions", "Exam review"], status: "online" })}>Open study room</button><button className="primary-button" onClick={() => actions.create(selectedSubject.id)}>+ New task</button></div><SubjectNotes key={selectedSubject.id} subject={selectedSubject} save={(next) => setSubjects(subjects.map((item) => item.id === next.id ? next : item))} />{subjectAssignments(selectedSubject, tasks).map((task) => <div className="subject-task" key={task.id}><TaskRow task={task} index={0} /><p>{task.description}</p><small>{task.status}</small><TaskControls task={task} /></div>)}{!subjectAssignments(selectedSubject, tasks).length && <p className="empty-state">No assignments yet.</p>}</section>}</div>;
 }
 
 function TasksView({ tasks, setTasks, onCreateTask }: { tasks: Task[]; setTasks: (tasks: Task[]) => void; onCreateTask: (task: Task) => void }) { const [filter, setFilter] = useState<"Today" | "Upcoming" | "All Tasks">("Today"); const shown = filter === "All Tasks" ? tasks : tasks.filter((task) => filter === "Today" ? task.status !== "Done" : task.status !== "Done" && task.deadline >= "2026-09-08"); return <div className="content"><div className="view-intro compact"><div><span className="section-kicker">SHARED TASK SYSTEM</span><h2>Keep the promises<br /><em>visible.</em></h2></div><button className="primary-button" onClick={() => onCreateTask({ id: `task-${Date.now()}`, title: "Untitled task", description: "Add a description when you are ready.", team: "Orchestrator", assignedAgent: "secretary", status: "Inbox", priority: "Medium", deadline: "2026-09-12", createdAt: today, updatedAt: today })}>+ New task</button></div><div className="tabs">{(["Today", "Upcoming", "All Tasks"] as const).map((item) => <button className={filter === item ? "tab active" : "tab"} key={item} onClick={() => setFilter(item)}>{item}<span>{item === "All Tasks" ? tasks.length : shown.length}</span></button>)}</div><section className="task-table">{shown.map((task) => <div className="task-table-row" key={task.id}><button className={`checkbox ${task.status === "Done" ? "checked" : ""}`} onClick={() => setTasks(tasks.map((item) => item.id === task.id ? { ...item, status: item.status === "Done" ? "Planned" : "Done" } : item))}>{task.status === "Done" ? "✓" : ""}</button><div className="task-info"><strong>{task.title}</strong><small>{task.description}</small></div><span className="task-team">{task.team}</span><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><span className="task-deadline">{task.deadline}</span><TaskIntegrations task={task} /></div>)}{shown.length === 0 && <div className="empty-state">Nothing here yet. A clear surface can be a useful thing.</div>}</section></div>; }
@@ -179,7 +193,7 @@ void StudyView;
 
 function TeamView({ team, onOpenAgent }: { team: Team; onOpenAgent: (agent: Agent) => void }) { return <div className="content"><div className="view-intro compact"><div><span className="section-kicker">{team.toUpperCase()} TEAM</span><h2>Make your next<br /><em>move count.</em></h2></div><p>{team === "Career" ? "Turn your experience into a story that opens doors." : "Build with a focused partner for every layer of the idea."}</p></div><div className="feature-banner"><div><span className="eyebrow">TEAM BRIEF</span><h3>{team === "Career" ? "One strong application beats ten rushed ones." : "A small, legible plan is a technical advantage."}</h3><p>Choose the specialist who can make the next decision easier.</p></div><span className="banner-mark">✦</span></div><div className="agent-cards wide">{agents.filter((agent) => agent.team === team).map((agent) => <AgentCard key={agent.id} agent={agent} onClick={() => onOpenAgent(agent)} />)}</div></div>; }
 
-function AgentWorkspace({ agent, messages, setMessages, onClose, onCreateTask, onRoute }: { agent: Agent; messages: ChatMessage[]; setMessages: (messages: StoredMessages) => void; onClose: () => void; onCreateTask: (task: Task) => void; onRoute: (request: string) => void }) { const [input, setInput] = useState(""); const send = (event: FormEvent) => { event.preventDefault(); if (!input.trim()) return; const content = input.trim(); const userMessage: ChatMessage = { id: `msg-${Date.now()}`, role: "user", content, createdAt: new Date().toISOString() }; const response: ChatMessage = { id: `msg-${Date.now()}-reply`, role: "agent", content: agent.id === "secretary" ? `I can help make that concrete. I would route this toward ${chooseRoute(content).map((id) => getAgent(id)?.name).join(" and ")}. I have added the handoff to your Pipeline.` : `I have captured that. Let’s turn it into one clear next step, then review the result together.`, createdAt: new Date().toISOString() }; setMessages({ ...readStorage(storageKeys.messages, {}), [agent.id]: [...messages, userMessage, response] }); if (agent.id === "secretary") onRoute(content); setInput(""); }; return <div className="workspace-overlay" role="dialog" aria-modal="true"><div className="workspace"><header className="workspace-header"><div className="workspace-agent"><Avatar agent={agent} /><div><span className="eyebrow">{agent.team} TEAM</span><h2>{agent.name}</h2><p>{agent.role}</p></div></div><button className="close-button" onClick={onClose}>×</button></header><div className="workspace-body"><div className="conversation">{messages.length === 0 && <div className="conversation-welcome"><Avatar agent={agent} /><h3>What are we moving forward?</h3><p>{agent.description}</p></div>}{messages.map((message) => <div className={`message ${message.role}`} key={message.id}><div className="message-label">{message.role === "user" ? "You" : agent.name}</div><div className="message-bubble">{message.content}</div></div>)}</div><aside className="workspace-aside"><span className="eyebrow">CAPABILITIES</span>{agent.capabilities.map((capability) => <div className="capability" key={capability}><span>✦</span>{capability}</div>)}<button className="aside-action" onClick={() => onCreateTask({ id: `task-${Date.now()}`, title: `Follow up with ${agent.name}`, description: "Created from agent workspace.", team: agent.team, assignedAgent: agent.id, status: "Inbox", priority: "Medium", deadline: "2026-09-12", createdAt: today, updatedAt: today })}>+ Create task</button></aside></div><form className="chat-composer" onSubmit={send}><input value={input} onChange={(event) => setInput(event.target.value)} placeholder={`Message ${agent.name}...`} /><button type="submit">↗</button></form></div></div>; }
+function AgentWorkspace({ agent, messages, setMessages, onClose, onCreateTask, onRoute }: { agent: Agent; messages: ChatMessage[]; setMessages: (messages: StoredMessages) => void; onClose: () => void; onCreateTask: (task: Task) => void; onRoute: (request: string) => void }) { const [input, setInput] = useState(""); const send = (event: FormEvent) => { event.preventDefault(); if (!input.trim()) return; const content = input.trim(); const userMessage: ChatMessage = { id: `msg-${Date.now()}`, role: "user", content, createdAt: new Date().toISOString() }; const response: ChatMessage = { id: `msg-${Date.now()}-reply`, role: "agent", content: agent.id === "secretary" ? `I can help make that concrete. I would route this toward ${chooseRoute(content).map((id) => getAgent(id)?.name).join(" and ")}. I have added the handoff to your Pipeline.` : `I have captured that. Let’s turn it into one clear next step, then review the result together.`, createdAt: new Date().toISOString() }; setMessages({  [agent.id]: [...messages, userMessage, response] }); if (agent.id === "secretary") onRoute(content); setInput(""); }; return <div className="workspace-overlay" role="dialog" aria-modal="true"><div className="workspace"><header className="workspace-header"><div className="workspace-agent"><Avatar agent={agent} /><div><span className="eyebrow">{agent.team} TEAM</span><h2>{agent.name}</h2><p>{agent.role}</p></div></div><button className="close-button" onClick={onClose}>×</button></header><div className="workspace-body"><div className="conversation">{messages.length === 0 && <div className="conversation-welcome"><Avatar agent={agent} /><h3>What are we moving forward?</h3><p>{agent.description}</p></div>}{messages.map((message) => <div className={`message ${message.role}`} key={message.id}><div className="message-label">{message.role === "user" ? "You" : agent.name}</div><div className="message-bubble">{message.content}</div></div>)}</div><aside className="workspace-aside"><span className="eyebrow">CAPABILITIES</span>{agent.capabilities.map((capability) => <div className="capability" key={capability}><span>✦</span>{capability}</div>)}<button className="aside-action" onClick={() => onCreateTask({ id: `task-${Date.now()}`, title: `Follow up with ${agent.name}`, description: "Created from agent workspace.", team: agent.team, assignedAgent: agent.id, status: "Inbox", priority: "Medium", deadline: "2026-09-12", createdAt: today, updatedAt: today })}>+ Create task</button></aside></div><form className="chat-composer" onSubmit={send}><input value={input} onChange={(event) => setInput(event.target.value)} placeholder={`Message ${agent.name}...`} /><button type="submit">↗</button></form></div></div>; }
 
 function AgentWorkspaceV2({ agent, messages, setMessages, onClose, onCreateTask, onRoute }: { agent: Agent; messages: ChatMessage[]; setMessages: (messages: StoredMessages) => void; onClose: () => void; onCreateTask: (task: Task) => void; onRoute: (request: string) => void }) {
   const [input, setInput] = useState("");
@@ -191,7 +205,7 @@ function AgentWorkspaceV2({ agent, messages, setMessages, onClose, onCreateTask,
     const now = new Date().toISOString();
     const userMessage: ChatMessage = { id: `msg-${Date.now()}`, role: "user", content, createdAt: now };
     const response: ChatMessage = { id: `msg-${Date.now()}-reply`, role: "agent", content: `${agent.name} received your instruction. I can turn it into a task or send it to the Pipeline for a fuller handoff.`, createdAt: now };
-    setMessages({ ...readStorage(storageKeys.messages, {}), [agent.id]: [...messages, userMessage, response] });
+    setMessages({  [agent.id]: [...messages, userMessage, response] });
     setInput("");
   };
   const createTask = () => {
@@ -199,7 +213,7 @@ function AgentWorkspaceV2({ agent, messages, setMessages, onClose, onCreateTask,
     const now = new Date().toISOString();
     onCreateTask({ id: `task-${Date.now()}`, title, description: `Assigned directly to ${agent.name}.`, team: agent.team, assignedAgent: agent.id, status: "Planned", priority: "Medium", deadline, createdAt: now, updatedAt: now });
     const confirmation: ChatMessage = { id: `msg-${Date.now()}-task`, role: "agent", content: `Created a task for ${agent.name}: ${title}. Due ${deadline}.`, createdAt: now };
-    setMessages({ ...readStorage(storageKeys.messages, {}), [agent.id]: [...messages, confirmation] });
+    setMessages({  [agent.id]: [...messages, confirmation] });
     setInput("");
   };
   return <div className="workspace-overlay" role="dialog" aria-modal="true"><div className="workspace"><header className="workspace-header"><div className="workspace-agent"><Avatar agent={agent} /><div><span className="eyebrow">{agent.team} TEAM</span><h2>{agent.name}</h2><p>{agent.role}</p></div></div><button className="close-button" onClick={onClose}>×</button></header><div className="workspace-body"><div className="conversation">{messages.length === 0 && <div className="conversation-welcome"><Avatar agent={agent} /><h3>What should {agent.name} work on?</h3><p>{agent.description}</p></div>}{messages.map((message) => <div className={`message ${message.role}`} key={message.id}><div className="message-label">{message.role === "user" ? "You" : agent.name}</div><div className="message-bubble">{message.content}</div></div>)}</div><aside className="workspace-aside"><span className="eyebrow">CAPABILITIES</span>{agent.capabilities.map((capability) => <div className="capability" key={capability}><span>✦</span>{capability}</div>)}<label className="workspace-deadline">Due date<input type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} /></label><button className="aside-action" onClick={createTask}>+ Create task</button><button className="aside-action" onClick={() => { const request = input.trim() || `Work on this with ${agent.name}`; onRoute(`${agent.name}: ${request}`); onClose(); }}>↗ Send to Pipeline</button></aside></div><form className="chat-composer" onSubmit={send}><input value={input} onChange={(event) => setInput(event.target.value)} placeholder={`Message ${agent.name}...`} aria-label={`Message ${agent.name}`} /><button className="send-button" type="submit" disabled={!input.trim()}>↗</button></form></div></div>;
@@ -220,7 +234,7 @@ function AgentWorkspaceV3({ agent, messages, setMessages, onClose, onCreateTask,
     const now = new Date().toISOString();
     const userMessage: ChatMessage = { id: `msg-${Date.now()}`, role: "user", content, createdAt: now };
     const nextMessages = [...messages, userMessage];
-    setMessages({ ...readStorage(storageKeys.messages, {}), [agent.id]: nextMessages });
+    setMessages({  [agent.id]: nextMessages });
     setInput(""); setError(""); setPending(true);
     try {
       const response = await fetch("/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agentId: agent.id, request: content, history: messages }), signal: AbortSignal.timeout(90000) });
@@ -228,7 +242,7 @@ function AgentWorkspaceV3({ agent, messages, setMessages, onClose, onCreateTask,
       if (!response.ok || !data.answer) throw new Error(data.error || "เอเจนต์ตอบไม่ได้ กรุณาลองใหม่");
       const answer = data.routed ? `${data.agentName} รับช่วงต่อจาก ${agent.name}\n\n${data.answer}` : data.answer;
       const reply: ChatMessage = { id: `msg-${Date.now()}-reply`, role: "agent", content: answer, createdAt: new Date().toISOString() };
-      setMessages({ ...readStorage(storageKeys.messages, {}), [agent.id]: [...nextMessages, reply] });
+      setMessages({  [agent.id]: [...nextMessages, reply] });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "เอเจนต์ตอบไม่ได้ กรุณาลองใหม่");
     } finally { setPending(false); }
