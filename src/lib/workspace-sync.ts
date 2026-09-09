@@ -35,6 +35,11 @@ export class WorkspaceSync {
     this.snapshot = { ...this.snapshot, status: typeof navigator !== "undefined" && !navigator.onLine ? "ออฟไลน์" : "บันทึกไม่สำเร็จ", error, conflict };
     for (const listener of this.listeners) listener();
   }
+  private requestOptions(init: RequestInit = {}): RequestInit {
+    return typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+      ? { ...init, signal: AbortSignal.timeout(20000) }
+      : init;
+  }
   version(kind: Kind, id: string) { return overlay(this.snapshot.records, this.snapshot.pending).find((row) => row.kind === kind && row.id === id)?.version ?? 0; }
   enqueue(kind: Kind, value: Parameters<typeof collection>[1], expected?: Record<string, number>) {
     const current = overlay(this.snapshot.records, this.snapshot.pending);
@@ -69,7 +74,9 @@ export class WorkspaceSync {
       if (this.snapshot.pending.length) this.publish({ status: "กำลังบันทึก", error: "" });
       while (true) {
         const operation = this.snapshot.pending[0];
-        const response = await this.request("/api/workspace", operation ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...operation, userId: this.userId }), signal: AbortSignal.timeout(20000) } : { cache: "no-store", signal: AbortSignal.timeout(20000) });
+        const response = await this.request("/api/workspace", operation
+          ? this.requestOptions({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...operation, userId: this.userId }) })
+          : this.requestOptions({ cache: "no-store" }));
         if (this.disposed) return;
         if (response.status === 401) { this.accountChanged(); return; }
         const body = await response.json();
@@ -81,7 +88,9 @@ export class WorkspaceSync {
         if (operation) this.storage.removeItem(`${this.key}.op.${operation.operationId}`);
         if (!pending.length) break;
       }
-    } catch { if (!this.disposed) this.report("เชื่อมต่อไม่ได้ แบบร่างยังอยู่ในบัญชีนี้บนเครื่อง กดลองใหม่เมื่อออนไลน์"); }
+    } catch (problem) {
+      if (!this.disposed) this.report(problem instanceof Error && problem.message ? `เชื่อมต่อไม่ได้: ${problem.message} แบบร่างยังอยู่ในบัญชีนี้บนเครื่อง กดลองใหม่เมื่อออนไลน์` : "เชื่อมต่อไม่ได้ แบบร่างยังอยู่ในบัญชีนี้บนเครื่อง กดลองใหม่เมื่อออนไลน์");
+    }
     finally {
       this.active = false;
       if (this.forceRequested && !this.disposed) {
