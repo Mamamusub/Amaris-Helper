@@ -29,6 +29,7 @@ function harness() {
   let failWrites = false;
   const localStorage = { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => { if (failWrites) throw new Error("Quota exceeded"); storage.set(key, value); } };
   function load(file) {
+    file = file.replaceAll("\\", "/");
     if (cache.has(file)) return cache.get(file);
     const source = fs.readFileSync(file, "utf8");
     const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -88,7 +89,7 @@ test("shared task lifecycle across Study, Tasks, Calendar, Today and refresh", (
   const id = read().find((task) => task.title === "Submit DS lab").id;
   assert.equal(read()[0].subjectId, "ds");
   assert.deepEqual(JSON.parse(h.storage.get("agent-helper.tasks.legacy-backup")), [original]);
-  h.click("Tasks2");
+  h.click("Tasks2"); h.click("All Tasks2");
   h.click("Edit"); h.field("Title", "Updated lab"); h.field("Priority", "High"); h.save();
   h.click("Calendar"); assert.ok(h.findAll((n) => n.type === "h4" && h.text(n) === "Updated lab").length === 1);
   h.click("Edit"); h.field("Description", "Updated from Calendar"); h.save();
@@ -96,10 +97,10 @@ test("shared task lifecycle across Study, Tasks, Calendar, Today and refresh", (
   h.click("☆ Focus"); h.click("Edit"); h.field("Due date", shiftDay(today, -1)); h.save();
   assert.equal(h.load("src/lib/task-model.ts").todayTasks(read(), today).length, 1);
   h.click("Complete"); assert.equal(h.load("src/lib/task-model.ts").todayTasks(read(), today).length, 0);
-  h.click("Tasks1"); h.click("Reopen"); h.click("Delete");
+  h.click("Tasks1"); h.click("All Tasks2"); h.click("Reopen"); h.click("Delete");
   assert.equal(read().find((task) => task.id === id).deletedAt != null, true);
   h.refresh(); h.click("Undo"); assert.equal(read().find((task) => task.id === id).deletedAt, undefined);
-  h.click("Tasks2"); h.click("Edit"); h.field("Due date", ""); h.save();
+  h.click("Tasks2"); h.click("All Tasks2"); h.click("Edit"); h.field("Due date", ""); h.save();
   h.click("Calendar"); assert.equal(h.findAll((n) => n.type === "h4" && h.text(n) === "Updated lab").length, 0);
   h.click("Today"); assert.equal(h.findAll((n) => n.type === "strong" && h.text(n) === "Updated lab").length, 1);
   h.click("Data Structures ↗"); assert.equal(h.findAll((n) => n.type === "strong" && h.text(n) === "Updated lab").length, 1);
@@ -138,6 +139,7 @@ for (const view of ["Today", "Tasks", "Calendar", "Study"]) {
     if (view !== "Today") h.click(view === "Tasks" ? "Tasks0" : view);
     if (view === "Study") { h.findAll((n) => n.type === "input" && n.props["aria-label"] === "New subject name")[0].props.onChange({ target: { value: "New subject" } }); h.render(); h.findAll((n) => n.type === "form" && n.props.className === "add-subject")[0].props.onSubmit({ preventDefault() {} }); h.render(); h.findAll((n) => n.type === "button" && n.props.className === "subject-card")[0].props.onClick(); h.render(); }
     h.click(view === "Today" ? "+" : "+ New task"); h.field("Title", `${view} created`); h.save();
+    if (view === "Tasks") h.click("All Tasks1");
     const read = () => JSON.parse(h.storage.get("agent-helper.tasks"));
     assert.equal(read().length, 1);
     const id = read()[0].id;
@@ -155,4 +157,37 @@ test("failed persistence keeps the previous task state and editor open", () => {
   assert.equal(h.storage.get("agent-helper.tasks"), "[]");
   assert.equal(h.findAll((n) => n.props.role === "alert").length, 1);
   assert.equal(h.findAll((n) => n.props["aria-label"] === "Edit task").length, 1);
+});
+
+test("Today selects the nearest three unfinished deadlines and retains explicit focus without duplicates", () => {
+  const h = harness(); const { todayTasks } = h.load("src/lib/task-model.ts");
+  const task = (id, deadline, extra = {}) => ({ id, deadline, status: "Planned", ...extra });
+  const tasks = [task("later", "2026-09-15"), task("overdue", "2026-09-08"), task("tomorrow", "2026-09-10", { focused: true }), task("today", "2026-09-09"), task("next", "2026-09-11"), task("done", "2026-09-09", { status: "Done" }), task("deleted", "2026-09-09", { deletedAt: "now" }), task("undated", ""), task("manual", "", { focused: true })];
+  assert.deepEqual(Array.from(todayTasks(tasks, "2026-09-09"), (task) => task.id), ["today", "tomorrow", "next", "manual"]);
+  assert.deepEqual(Array.from(todayTasks(tasks.map((task) => task.id === "today" ? { ...task, status: "Done" } : task), "2026-09-09"), (task) => task.id), ["tomorrow", "next", "later", "manual"]);
+});
+
+test("Tasks opens This week and Focus uses the same deadline for imported and manual tasks", () => {
+  const h = harness();
+  const { dayKey, shiftDay } = h.load("src/lib/calendar.ts");
+  const today = dayKey(new Date());
+  const base = { description: "", team: "Study", assignedAgent: "researcher", status: "Planned", priority: "Medium", createdAt: today, updatedAt: today };
+  h.storage.set("agent-helper.tasks", JSON.stringify([{ ...base, id: "imported", title: "Calendar assignment", sourceEventId: "google-event", deadline: today }, { ...base, id: "manual", title: "Later assignment", deadline: shiftDay(today, 1) }]));
+  h.storage.set("agent-helper.subjects", "[]"); h.render();
+  assert.equal(h.findAll((n) => n.type === "h3" && h.text(n) === "Calendar assignment").length, 1);
+  h.click("Tasks2");
+  assert.ok(h.findAll((n) => n.props.className === "tab active" && h.text(n).startsWith("This week")).length);
+  h.click("Today"); h.click("Tasks2");
+  assert.ok(h.findAll((n) => n.props.className === "tab active" && h.text(n).startsWith("This week")).length);
+});
+
+test("Focus includes unassigned Calendar deadlines but suppresses imported, completed and deleted originals", () => {
+  const h = harness(); const { focusCandidates } = h.load("src/lib/task-model.ts");
+  const event = { id: "calendar-event", title: "Upcoming lab", description: "Lab", allDay: true, start: "2026-09-10", end: "2026-09-11" };
+  const shown = focusCandidates([], [event, event], "2026-09-09");
+  assert.equal(shown.length, 1); assert.equal(shown[0].title, "Upcoming lab"); assert.equal(shown[0].deadline, "2026-09-10");
+  assert.equal(focusCandidates([{ ...shown[0], status: "Done" }], [event], "2026-09-09").length, 0);
+  assert.equal(focusCandidates([{ ...shown[0], deletedAt: "now" }], [event], "2026-09-09").length, 0);
+  const updated = focusCandidates([{ ...shown[0], title: "Edited task", deadline: "2026-09-12" }], [event], "2026-09-09");
+  assert.equal(updated.length, 1); assert.equal(updated[0].title, "Edited task"); assert.equal(updated[0].deadline, "2026-09-12");
 });
