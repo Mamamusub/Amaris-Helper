@@ -35,7 +35,7 @@ export default function AccountBoundary({ children }: { children: ReactNode }) {
         if (id !== accountRef.current) {
           setAccount(undefined); setCloud(null);
           cloudRef.current?.dispose();
-          const next = id ? new WorkspaceSync(id, localStorage, fetch, () => { setAccount(undefined); void check(); }) : null;
+          const next = id ? new WorkspaceSync(id, localStorage, window.fetch.bind(window), () => { setAccount(undefined); void check(); }) : null;
           cloudRef.current = next; setCloud(next); setAccount(body.user); accountRef.current = id;
           if (next) void next.sync();
           const notification = new BroadcastChannel("amaris-auth"); notification.postMessage("changed"); notification.close();
