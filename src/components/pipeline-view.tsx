@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { AgentRun, PipelineImage } from "@/lib/types";
 import { PipelineComposer, PipelineImages } from "./pipeline-composer";
+import LivePipeline from "./live-pipeline";
 
 export function AIStatus() {
   return <div className="pipeline-ai-status"><strong>ChatGPT · คัดลอกและวางด้วยตนเอง</strong><p>เว็บเตรียมคำสั่งโดยไม่เรียก AI API จากนั้นใช้ ChatGPT และนำคำตอบกลับมาบันทึกที่นี่</p></div>;
@@ -30,11 +31,11 @@ function RunDetails({ run, onSaveResponse }: { run: AgentRun; onSaveResponse: (i
   </section>;
 }
 
-export default function PipelineView({ runs, onRoute, onSaveResponse, storageError }: { runs: AgentRun[]; onRoute: (request: string, images?: PipelineImage[]) => boolean; onSaveResponse: (id: string, response: string) => boolean; storageError: string }) {
+export default function PipelineView({ runs, onRoute, onSaveResponse, storageError, onCreateTask }: { runs: AgentRun[]; onRoute: (request: string, images?: PipelineImage[]) => boolean; onSaveResponse: (id: string, response: string) => boolean; storageError: string; onCreateTask: (task: import("@/lib/types").Task) => void }) {
   const [selectedId, setSelectedId] = useState("");
   const run = runs.find((item) => item.id === selectedId) ?? runs[0];
   function start(request: string, images?: PipelineImage[]) { const ok = onRoute(request, images); if (ok) setSelectedId(""); return ok; }
-  return <div className="content"><div className="view-intro pipeline-intro"><div><span className="section-kicker">AMARIS / CHATGPT PIPELINE</span><h2>From a request<br /><em>to a result.</em></h2><p>เตรียมคำสั่ง → ใช้ใน ChatGPT → บันทึกคำตอบ</p></div><PipelineComposer onRoute={start} /></div><AIStatus />
+  return <div className="content"><div className="view-intro pipeline-intro"><div><span className="section-kicker">AMARIS / AGENT PIPELINE</span><h2>From a request<br /><em>to a result.</em></h2><p>เลือก Agent → เริ่มงาน → ติดตามผลแบบเรียลไทม์</p></div><PipelineComposer onRoute={start} /></div><LivePipeline onCreateTask={onCreateTask} /><AIStatus />
     {storageError && <p className="pipeline-upload-error" role="alert">{storageError}</p>}
     {run && <><label className="pipeline-history">ประวัติงาน<select value={run.id} onChange={(event) => setSelectedId(event.target.value)}>{runs.map((item) => <option key={item.id} value={item.id}>{new Date(item.createdAt).toLocaleString()} · {item.userRequest.slice(0, 60)}</option>)}</select></label><RunDetails key={run.id} run={run} onSaveResponse={onSaveResponse} /><button className="secondary-button" onClick={() => start(run.userRequest, run.images)}>สร้างคำสั่งใหม่จากรายการนี้ ↗</button></>}
     {!run && <div className="empty-pipeline"><div className="empty-orbit">🐼</div><h3>พร้อมเตรียมคำสั่งให้ Pai</h3><p>พิมพ์งานด้านบนเพื่อสร้างคำสั่งพร้อมบทบาทผู้ช่วย</p></div>}

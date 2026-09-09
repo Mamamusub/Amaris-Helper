@@ -115,7 +115,7 @@ function LoadedAppShell() {
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
       {view === "dashboard" && <Dashboard calendarId={calendarId} allTasks={storedTasks} onCreateTask={addTask} onViewTasks={() => setView("tasks")} tasks={tasks} runs={runs} onRoute={routeRequest} onOpenAgent={openAgent} />}
       {view === "teams" && <TeamGrid onOpenAgent={openAgent} />}
-      {view === "pipeline" && <PipelineView runs={runs} onRoute={routeRequest} onSaveResponse={saveResponse} storageError={storageError} />}
+      {view === "pipeline" && <PipelineView runs={runs} onRoute={routeRequest} onSaveResponse={saveResponse} storageError={storageError} onCreateTask={addTask} />}
       {view === "tasks" && <TaskTimelineView tasks={tasks} />}
       {view === "study" && <StudyAssignmentsView subjects={subjects} setSubjects={commitSubjects} tasks={tasks} onOpenAgent={openAgent} selectedSubjectId={subjectId} />}
       {view === "career" && <TeamView team="Career" onOpenAgent={openAgent} />}
