@@ -99,6 +99,30 @@ function transport(user) {
 }
 function settled(store) { return new Promise((resolve) => { const check = () => { if (["บันทึกแล้ว", "บันทึกไม่สำเร็จ", "ออฟไลน์"].includes(store.getSnapshot().status)) { off(); resolve(); } }; const off = store.subscribe(check); check(); }); }
 
+test("subject deletion and task detachment persist together after offline reload", async () => {
+  const wire = transport(bob), storage = memory();
+  const store = new WorkspaceSync(bob, storage, wire.request);
+  await store.sync();
+  const subject = { id: "delete-subject", name: "Math" };
+  const linked = { ...task("detach-task"), subjectId: subject.id };
+  store.enqueueBatch([{ kind: "subject", value: [subject] }, { kind: "task", value: [linked] }]);
+  await settled(store);
+  wire.faults.offline = true;
+  store.enqueueBatch([{ kind: "task", value: [{ ...linked, subjectId: undefined }] }, { kind: "subject", value: [{ ...subject, deletedAt: "2026-09-11" }] }]);
+  assert.equal(store.getSnapshot().data.subjects.some((row) => row.id === subject.id), false);
+  assert.equal(store.getSnapshot().pending.length, 1);
+  await settled(store);
+  store.dispose();
+  wire.faults.offline = false;
+  const restored = new WorkspaceSync(bob, storage, wire.request);
+  await restored.sync();
+  const rows = await snapshot(bob);
+  assert.ok(rows.find((row) => row.id === subject.id).data.deletedAt);
+  assert.equal(rows.find((row) => row.id === linked.id).data.subjectId, undefined);
+  assert.equal(restored.getSnapshot().data.subjects.some((row) => row.id === subject.id), false);
+  restored.dispose();
+});
+
 test("two device sessions sync confirmed edits and retain offline drafts across remount", async () => {
   const wire = transport(bob); const cacheA = memory();
   const a = new WorkspaceSync(bob, cacheA, wire.request); const b = new WorkspaceSync(bob, memory(), transport(bob).request);

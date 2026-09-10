@@ -41,3 +41,16 @@ export function updateTask(tasks: Task[], id: string, patch: Partial<Task>): Tas
 export function migrateTasks(tasks: Task[], subjects: Subject[]): Task[] {
   return tasks.map((task) => !task.subjectId && subjects.some((subject) => subject.id === task.assignedAgent) ? { ...task, subjectId: task.assignedAgent } : task);
 }
+
+export function detachSubject(tasks: Task[], id: string): Task[] {
+  const detach = <T extends { subjectId?: string; assignedAgent: string }>(value: T): T => ({
+    ...value,
+    subjectId: value.subjectId === id ? undefined : value.subjectId,
+    assignedAgent: value.assignedAgent === id ? "researcher" : value.assignedAgent,
+  });
+  return tasks.map((task) => {
+    const nextTemplate = task.nextTemplate;
+    if (task.subjectId !== id && task.assignedAgent !== id && nextTemplate?.subjectId !== id && nextTemplate?.assignedAgent !== id) return task;
+    return { ...detach(task), ...(nextTemplate ? { nextTemplate: detach(nextTemplate) } : {}), updatedAt: new Date().toISOString() };
+  });
+}

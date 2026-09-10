@@ -58,7 +58,7 @@ function template(task: Task): NonNullable<Task["nextTemplate"]> {
 export function editRecurring(tasks: Task[], draft: Task, scope: "this" | "future" = "future"): Task[] {
   const original = tasks.find((task) => task.id === draft.id);
   if (!original) return [draft, ...tasks];
-  const updated = { ...original, ...draft, focusSessions: original.focusSessions, updatedAt: new Date().toISOString() };
+  const updated = { ...original, ...draft, focusSessions: draft.focusSessions ?? original.focusSessions, updatedAt: new Date().toISOString() };
   if (!original.repeat) return tasks.map((task) => task.id === draft.id ? updated : task);
   if (scope === "this") return tasks.map((task) => task.id === draft.id ? { ...updated, repeat: original.repeat, occurrenceDate: original.occurrenceDate || original.deadline, nextTemplate: original.nextTemplate ?? template(original) } : task);
   const series = original.seriesId || original.id;

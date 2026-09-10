@@ -97,6 +97,28 @@ test("editing scopes preserve completed history, occurrence-only templates and r
 });
 
 const { focusHistory, summarizeFocus, focusRange, snapshotFocus, focusDuration, sessionClock, validRange } = load("src/lib/focus-history.ts");
+test("assigning an unassigned focus task moves its history into the selected subject", () => {
+  const subject = { id: "math", name: "Math", color: "#abc" };
+  const record = { id: "unassigned", startedAt: Date.parse("2026-09-10"), elapsedMs: 60000, snapshot: { taskTitle: "Task", subjectId: null, subjectName: null } };
+  const original = { ...base, repeat: undefined, focusSessions: [record] };
+  const edited = editRecurring([original], { ...original, subjectId: subject.id });
+  const summary = summarizeFocus(focusHistory(edited, [subject]), { from: "2026-09-10", to: "2026-09-10" }, [subject]);
+  assert.equal(summary.groups[0].id, "math");
+  assert.equal(summary.elapsedMs, 60000);
+  const amended = { ...record, snapshot: { ...record.snapshot, subjectId: "math", subjectName: "Math" } };
+  assert.equal(editRecurring([original], { ...original, focusSessions: [amended] })[0].focusSessions[0].snapshot.subjectId, "math");
+});
+
+test("deleting a subject detaches legacy and future references without deleting focus history", () => {
+  const { detachSubject, migrateTasks } = load("src/lib/task-model.ts");
+  const original = { ...base, subjectId: "math", assignedAgent: "math", nextTemplate: { subjectId: "math", assignedAgent: "math" } };
+  const [updated] = detachSubject([original], "math");
+  assert.equal(updated.subjectId, undefined);
+  assert.equal(updated.nextTemplate.subjectId, undefined);
+  assert.equal(updated.nextTemplate.assignedAgent, "researcher");
+  assert.equal(migrateTasks([updated], [{ id: "math" }])[0].subjectId, undefined);
+  assert.equal(updated.focusSessions, original.focusSessions);
+});
 const historyRecord = (id, start = "2026-09-10T02:00:00Z", extra = {}) => ({ id, startedAt: Date.parse(start), endedAt: Date.parse(start) + 1800000, elapsedMs: 1500000, note: "", ...extra });
 test("Focus ranges start on Monday and handle month/year boundaries and invalid custom dates", () => {
   assert.equal(focusRange("week", "2026-09-13").from, "2026-09-07");
