@@ -1,21 +1,28 @@
 "use client";
 
 import { createContext, useContext, useState, type ReactNode } from "react";
+import { Subtasks, RepeatEditor } from "./task-extras";
+import { repeatSummary } from "@/lib/task-recurrence";
+import { dialogKeyboard } from "./dialog-keyboard";
 import type { Subject, Task } from "@/lib/types";
 
 export const TaskContext = createContext<{
+  focus: (id: string) => void;
   subjects: Subject[];
   update: (id: string, patch: Partial<Task>) => void;
   remove: (id: string) => void;
   edit: (task: Task) => void;
   create: (subjectId?: string, deadline?: string, focused?: boolean) => void;
   openSubject: (id: string) => void;
-}>({ subjects: [], update() {}, remove() {}, edit() {}, create() {}, openSubject() {} });
+}>({ focus() {}, subjects: [], update() {}, remove() {}, edit() {}, create() {}, openSubject() {} });
 
 export function TaskControls({ task }: { task: Task }) {
   const actions = useContext(TaskContext);
   const subject = actions.subjects.find((item) => item.id === task.subjectId);
   return <div className="shared-task-actions">
+    {!!task.subtasks?.length && <span className="task-progress" aria-label="ความคืบหน้างานย่อย">{task.subtasks.filter((item) => item.done).length}/{task.subtasks.length}<progress max={task.subtasks.length} value={task.subtasks.filter((item) => item.done).length} /></span>}
+    {task.repeat && <small className="repeat-label">↻ {repeatSummary(task.repeat)}</small>}
+    <button className="secondary-button" onClick={() => actions.focus(task.id)}>เริ่มโฟกัส</button>
     {subject && <button className="text-button" onClick={() => actions.openSubject(subject.id)}>{subject.name} ↗</button>}
     <button className="secondary-button" onClick={() => actions.edit(task)}>Edit</button>
     <button className="secondary-button" aria-pressed={!!task.focused} onClick={() => actions.update(task.id, { focused: !task.focused })}>{task.focused ? "★ Focused" : "☆ Focus"}</button>
@@ -32,18 +39,24 @@ export function canonicalTaskTitle(title: string) {
     .trim();
 }
 
-export function TaskEditor({ task, tasks = [], onSave, onClose, recurringAction }: { task: Task; tasks?: Task[]; onSave: (task: Task) => void; onClose: () => void; recurringAction?: ReactNode }) {
+export function TaskEditor({ task, tasks = [], onSave, onClose, recurringAction }: { task: Task; tasks?: Task[]; onSave: (task: Task, scope?: "this" | "future") => void; onClose: () => void; recurringAction?: ReactNode }) {
   const [draft, setDraft] = useState(task);
+  const [scope, setScope] = useState<"this" | "future">("future");
   const { subjects } = useContext(TaskContext);
   const titleOptions = Array.from(new Set(tasks.map((item) => canonicalTaskTitle(item.title)).filter(Boolean)));
-  return <div className="workspace-overlay" role="dialog" aria-modal="true" aria-label="Edit task" onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}><form className="panel task-editor" onSubmit={(event) => { event.preventDefault(); if (draft.title.trim()) onSave({ ...draft, title: draft.title.trim() }); }}>
+  return <div className="workspace-overlay" role="dialog" aria-modal="true" aria-label="Edit task" onKeyDown={(event) => dialogKeyboard(event, onClose)}><form className="panel task-editor" onSubmit={(event) => { event.preventDefault(); if (draft.title.trim()) onSave({ ...draft, title: draft.title.trim(), ...(draft.repeat && scope === "future" && draft.deadline !== task.deadline ? { repeat: { ...draft.repeat, anchor: draft.deadline }, occurrenceDate: draft.deadline } : {}), subtasks: (draft.subtasks ?? []).filter((item) => item.title.trim()) }, scope); }}>
     <div className="panel-heading"><h3>Task details</h3><button type="button" className="close-button" onClick={onClose} aria-label="Close task editor">×</button></div>
     {recurringAction && <div className="task-editor-recurring">{recurringAction}</div>}
     <label>Title<input autoFocus required list="task-title-options" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /><datalist id="task-title-options">{titleOptions.map((title) => <option key={title} value={title} />)}</datalist></label>
     <label>Task color<input className="task-color-input" type="color" value={draft.color ?? "#d7f36b"} onChange={(event) => setDraft({ ...draft, color: event.target.value })} /></label>
     <label>Description<textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
-    <fieldset><legend>???????</legend>{draft.subtasks?.map((item) => <label key={item.id}><input type="checkbox" checked={item.done} onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks!.map((subtask) => subtask.id === item.id ? { ...subtask, done: event.target.checked } : subtask) })} /><input aria-label="???????????" value={item.title} onChange={(event) => setDraft({ ...draft, subtasks: draft.subtasks!.map((subtask) => subtask.id === item.id ? { ...subtask, title: event.target.value } : subtask) })} /></label>)}<button className="secondary-button" type="button" onClick={() => setDraft({ ...draft, subtasks: [...(draft.subtasks ?? []), { id: crypto.randomUUID(), title: "", done: false }] })}>+ ???????</button></fieldset>
-    <label>Due date<input type="date" value={draft.deadline} onChange={(event) => setDraft({ ...draft, deadline: event.target.value })} /></label>
+    <Subtasks items={draft.subtasks} onChange={(subtasks) => setDraft({ ...draft, subtasks })} />
+    {!!draft.subtasks?.length && draft.subtasks.every((item) => item.done) && draft.status !== "Done" && <button type="button" className="secondary-button" onClick={() => setDraft({ ...draft, status: "Done" })}>งานย่อยครบแล้ว · ปิดงานหลักเมื่อบันทึก</button>}
+    {task.repeat && scope === "this" && <p className="muted">ตั้งค่าการทำซ้ำได้เมื่อเลือก “รอบนี้และรอบถัดไป”</p>}
+    <RepeatEditor disabled={!!task.repeat && scope === "this"} task={draft} change={(patch) => setDraft({ ...draft, ...patch })} />
+    {task.repeat && <label>ใช้การแก้ไขกับ<select value={scope} onChange={(event) => setScope(event.target.value as "this" | "future")}><option value="this">เฉพาะรอบนี้</option><option value="future">รอบนี้และรอบถัดไป</option></select></label>}
+
+    <label>Due date<input type="date" required={!!draft.repeat} value={draft.deadline} onChange={(event) => setDraft({ ...draft, deadline: event.target.value })} /></label>
     <label>Priority<select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value as Task["priority"] })}>{["High", "Medium", "Low"].map((value) => <option key={value}>{value}</option>)}</select></label>
     <label>Status<select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as Task["status"] })}>{["Inbox", "Planned", "In Progress", "Waiting", "Done"].map((value) => <option key={value}>{value}</option>)}</select></label>
     <label>Subject<select value={draft.subjectId ?? ""} onChange={(event) => setDraft({ ...draft, subjectId: event.target.value || undefined, team: event.target.value ? "Study" : draft.team })}><option value="">No subject</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label>

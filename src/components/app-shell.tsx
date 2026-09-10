@@ -18,6 +18,9 @@ import AccountBoundary, { useCloud, useCloudSnapshot } from "@/components/accoun
 
 import SubjectNotes from "@/components/subject-notes";
 
+import { dialogKeyboard } from "./dialog-keyboard";
+import FocusMode from "./focus-mode";
+import { advanceRecurring, editRecurring, nextForTask, recurrenceToday } from "@/lib/task-recurrence";
 import FocusAssignments from "@/components/focus-assignments";
 
 import RecurringTasks, { GoLessonButton } from "@/components/recurring-tasks";
@@ -42,8 +45,16 @@ function LoadedAppShell() {
   const [view, setView] = useState<View>("dashboard");
   const [calendarId, setCalendarId] = useState("");
   const [localTasks, setTasks] = useState<Task[]>(() => cloud ? [] : migrateTasks(readStorage(storageKeys.tasks, demoTasks), readStorage(storageKeys.subjects, demoSubjects)));
+  useEffect(() => {
+    if (cloud) return;
+    const refresh = (event: StorageEvent) => { if (event.key === storageKeys.tasks) setTasks(readStorage(storageKeys.tasks, [])); };
+    window.addEventListener("storage", refresh);
+    return () => window.removeEventListener("storage", refresh);
+  }, [cloud]);
   const storedTasks = synced?.data.tasks ?? localTasks;
   const tasks = liveTasks(storedTasks);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editorVersion, setEditorVersion] = useState(0);
   const [editor, setEditor] = useState<Task | null>(null);
   const [undoIds, setUndoIds] = useState<string[]>(() => storedTasks.filter((task) => task.deletedAt).sort((a, b) => a.deletedAt!.localeCompare(b.deletedAt!)).map((task) => task.id));
@@ -63,8 +74,21 @@ function LoadedAppShell() {
 
   const openAgent = (agent: Agent) => setSelectedAgent(agent);
   const commitTasks = (next: Task[], expected?: Record<string, number>) => {
+    next = advanceRecurring(next);
     if (cloud) return cloud.enqueue("task", next, expected);
-    try { const original = window.localStorage.getItem(storageKeys.tasks); if (original && !window.localStorage.getItem(`${storageKeys.tasks}.legacy-backup`)) window.localStorage.setItem(`${storageKeys.tasks}.legacy-backup`, original); writeStorage(storageKeys.tasks, next); setTasks(next); setSaveError(""); return true; }
+    try { const original = window.localStorage.getItem(storageKeys.tasks);
+      if (original) {
+        const latest = JSON.parse(original) as Task[];
+        const changed = next.filter((task) => JSON.stringify(task) !== JSON.stringify(storedTasks.find((old) => old.id === task.id)));
+        for (const task of changed) {
+          const before = storedTasks.find((old) => old.id === task.id), current = latest.find((old) => old.id === task.id);
+          if (current && JSON.stringify(before) !== JSON.stringify(current)) { setTasks(latest); setSaveError("งานถูกแก้ไขในอีกแท็บ กรุณาตรวจข้อมูลล่าสุดแล้วลองอีกครั้ง"); return false; }
+        }
+        const merged = new Map(latest.map((task) => [task.id, task]));
+        for (const task of changed) merged.set(task.id, task);
+        next = [...next.filter((task) => !latest.some((old) => old.id === task.id)), ...merged.values()].filter((task, index, all) => all.findIndex((item) => item.id === task.id) === index);
+      }
+      if (original && !window.localStorage.getItem(`${storageKeys.tasks}.legacy-backup`)) window.localStorage.setItem(`${storageKeys.tasks}.legacy-backup`, original); writeStorage(storageKeys.tasks, next); setTasks(next); setSaveError(""); return true; }
     catch { setSaveError("Could not save tasks. Free browser storage and try again."); return false; }
   };
   const commitSubjects = (next: Subject[]) => {
@@ -73,7 +97,7 @@ function LoadedAppShell() {
     catch { setSaveError("Could not save subjects. Free browser storage and try again."); return false; }
   };
   const addTask = (task: Task) => { if (!storedTasks.some((item) => item.id === task.id)) commitTasks([task, ...storedTasks]); };
-  const update = (id: string, patch: Partial<Task>) => { commitTasks(updateTask(storedTasks, id, patch)); };
+  const update = (id: string, patch: Partial<Task>) => commitTasks(updateTask(storedTasks, id, patch));
   const create = (subjectId?: string, deadline = "", focused = false) => {
     const now = new Date().toISOString();
     setEditorVersion(0);
@@ -106,12 +130,13 @@ function LoadedAppShell() {
     setView("pipeline");
     return started;
   };
-  return <TaskContext.Provider value={{ subjects, update, create, edit: (task) => { setEditorVersion(cloud?.version("task", task.id) ?? 0); setEditor(task); }, openSubject, remove: (id) => { if (commitTasks(updateTask(storedTasks, id, { deletedAt: new Date().toISOString() }))) setUndoIds((ids) => [...ids, id]); } }}><div className="app-frame">
+  return <TaskContext.Provider value={{ focus: setFocusId, subjects, update, create, edit: (task) => { setEditorVersion(cloud?.version("task", task.id) ?? 0); setEditor(task); }, openSubject, remove: (id) => { if (storedTasks.find((task) => task.id === id)?.repeat) { setDeleteId(id); return; } if (commitTasks(updateTask(storedTasks, id, { deletedAt: new Date().toISOString() }))) setUndoIds((ids) => [...ids, id]); } }}><div className="app-frame">
     <Sidebar view={view} setView={setView} taskCount={tasks.filter((task) => task.status !== "Done").length} />
     <main className="main-stage"><RecurringTasks tasks={storedTasks} save={(additions) => { if (cloud) cloud.import(additions.map((task) => ({ kind: "task", id: task.id, data: { ...task }, version: 0 }))); else commitTasks([...additions, ...storedTasks]); }} /><CalendarReturnNotice onSettings={() => setView("settings")} />
       <header className="topbar"><div><span className="eyebrow">PERSONAL AI TEAM / AMARIS</span><h1>{view === "dashboard" ? "Good morning, Pai." : (view === "settings" ? "Settings" : navItems.find((item) => item.id === view)?.label)}</h1></div><div className="topbar-actions"><span className="status-dot" /> <span className="muted">Personal workspace</span><button className="avatar-button" aria-label="Pai profile">P</button></div></header>
+    {storedTasks.filter((task) => task.repeat && !task.recurrenceHandled && (task.status === "Done" || task.deletedAt) && nextForTask(task) && nextForTask(task)! < recurrenceToday(task.repeat)).map((task) => <div className="missed-round" role="status" key={task.id}><strong>{task.title}</strong><p>มีรอบที่พลาดตั้งแต่ {nextForTask(task)} · ยังไม่ได้สร้างงานค้าง</p><button className="secondary-button" onClick={() => update(task.id, { skipBefore: nextForTask(task)! })}>ทำรอบที่พลาดถัดไป</button><button className="primary-button" onClick={() => update(task.id, { skipBefore: recurrenceToday(task.repeat!) })}>ข้ามไปวันนี้หรือรอบถัดไป</button></div>)}
       {saveError && <div className="notice" role="alert">{saveError}</div>}
-      {!!undoIds.length && <div className="notice" role="status">Task deleted <button onClick={() => { const id = undoIds[undoIds.length - 1]; if (commitTasks(updateTask(storedTasks, id, { deletedAt: undefined }))) setUndoIds((ids) => ids.slice(0, -1)); }}>Undo</button></div>}
+      {!!undoIds.length && <div className="notice" role="status">Task deleted <button onClick={() => { const id = undoIds[undoIds.length - 1]; const selected = storedTasks.find((task) => task.id === id); const restored = storedTasks.filter((task) => task.id === id || (selected?.deletionBatch && task.deletionBatch === selected.deletionBatch)); if (commitTasks(storedTasks.map((task) => restored.includes(task) ? { ...task, deletedAt: undefined, recurrenceHandled: task.deletionBatch ? task.recurrenceWasHandled : task.recurrenceHandled, deletionBatch: undefined } : task))) setUndoIds((ids) => ids.filter((value) => !restored.some((task) => task.id === value))); }}>Undo</button></div>}
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
       {view === "dashboard" && <Dashboard calendarId={calendarId} allTasks={storedTasks} onCreateTask={addTask} onViewTasks={() => setView("tasks")} tasks={tasks} runs={runs} onRoute={routeRequest} onOpenAgent={openAgent} />}
       {view === "teams" && <TeamGrid onOpenAgent={openAgent} />}
@@ -125,7 +150,16 @@ function LoadedAppShell() {
       {view === "settings" && <SettingsView />}
     </main>
     {selectedAgent && <AgentWorkspaceV3 agent={selectedAgent} messages={messages[selectedAgent.id] ?? []} setMessages={setMessages} onClose={() => setSelectedAgent(null)} onCreateTask={(task) => addTask({ ...task, subjectId: subjects.some((subject) => subject.id === selectedAgent.id) ? selectedAgent.id : task.subjectId })} onRoute={routeRequest} />}
-    {editor && <TaskEditor tasks={storedTasks} recurringAction={!storedTasks.some((task) => task.id === editor.id) ? <GoLessonButton tasks={storedTasks} save={(additions) => { if (cloud) cloud.import(additions.map((task) => ({ kind: "task", id: task.id, data: { ...task }, version: 0 }))); else commitTasks([...additions, ...storedTasks]); }} /> : undefined} key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task) => { const next = storedTasks.some((item) => item.id === task.id) ? updateTask(storedTasks, task.id, task) : [task, ...storedTasks]; if (commitTasks(next, { [task.id]: editorVersion })) setEditor(null); }} />}
+    {editor && <TaskEditor tasks={storedTasks} recurringAction={!storedTasks.some((task) => task.id === editor.id) ? <GoLessonButton tasks={storedTasks} save={(additions) => { if (cloud) cloud.import(additions.map((task) => ({ kind: "task", id: task.id, data: { ...task }, version: 0 }))); else commitTasks([...additions, ...storedTasks]); }} /> : undefined} key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task, scope) => {
+      const next = editRecurring(storedTasks, task, scope);
+      if (commitTasks(next, { [task.id]: editorVersion })) {
+        const deleted = next.filter((item) => item.deletedAt && !storedTasks.find((old) => old.id === item.id)?.deletedAt).map((item) => item.id);
+        setUndoIds((ids) => [...ids, ...deleted]);
+        setEditor(null);
+      } }} />}
+    <FocusMode taskId={focusId} tasks={storedTasks} accountKey={cloud?.key ?? "agent-helper"} open={setFocusId} close={() => setFocusId(null)} save={update} />
+
+    {deleteId && <div className="workspace-overlay" role="dialog" aria-modal="true" aria-label="ลบงานซ้ำ" onKeyDown={(event) => dialogKeyboard(event, () => setDeleteId(null))}><section className="panel task-editor"><h3>ลบงานซ้ำ</h3><p>รอบก่อนหน้ายังคงอยู่ในประวัติ</p>{(["this", "future"] as const).map((scope) => <button className="secondary-button" key={scope} onClick={() => { const selected = storedTasks.find((task) => task.id === deleteId)!; const ids = storedTasks.filter((task) => task.id === deleteId || (scope === "future" && (task.seriesId || task.id) === (selected.seriesId || selected.id) && (task.occurrenceDate || task.deadline) > (selected.occurrenceDate || selected.deadline))).map((task) => task.id); if (commitTasks(storedTasks.map((task) => ids.includes(task.id) ? { ...task, deletedAt: new Date().toISOString(), deletionBatch: deleteId, recurrenceWasHandled: task.recurrenceHandled, recurrenceHandled: scope === "future" ? true : task.recurrenceHandled } : task))) { setUndoIds((old) => [...old, ...ids]); setDeleteId(null); } }}>{scope === "this" ? "เฉพาะรอบนี้" : "รอบนี้และรอบถัดไป"}</button>)}<button className="secondary-button" autoFocus onClick={() => setDeleteId(null)}>ยกเลิก</button></section></div>}
   </div></TaskContext.Provider>;
 }
 
@@ -133,12 +167,12 @@ function Sidebar({ view, setView, taskCount }: { view: View; setView: (view: Vie
   return <aside className="sidebar"><div className="brand"><div className="brand-mark">✦</div><div><strong>Amaris</strong><span>Pai&apos;s AI team</span></div></div><div className="workspace-switcher"><span className="mini-mark">P</span><div><strong>Pai&apos;s workspace</strong><small>Local workspace</small></div><span className="chevron">⌄</span></div><nav aria-label="Main navigation">{navItems.map((item) => <button type="button" key={item.id} className={view === item.id ? "nav-item active" : "nav-item"} aria-current={view === item.id ? "page" : undefined} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}{item.id === "tasks" && <b>{taskCount}</b>}</button>)}</nav><div className="sidebar-footer"><button type="button" className={view === "settings" ? "nav-item active" : "nav-item"} aria-current={view === "settings" ? "page" : undefined} onClick={() => setView("settings")}><span>⚙</span>Settings</button><div className="local-badge"><span className="status-dot" /><div><strong>Local-first</strong><small>Tasks saved here</small></div></div></div></aside>;
 }
 
-function Dashboard({ calendarId, tasks, allTasks, onCreateTask, runs, onRoute, onOpenAgent, onViewTasks }: { calendarId: string; allTasks: Task[]; onCreateTask: (task: Task) => void; onViewTasks: () => void; tasks: Task[]; runs: AgentRun[]; onRoute: (request: string) => void; onOpenAgent: (agent: Agent) => void }) {
+function Dashboard({ calendarId, tasks, allTasks, onCreateTask, runs, onRoute, onViewTasks }: { calendarId: string; allTasks: Task[]; onCreateTask: (task: Task) => void; onViewTasks: () => void; tasks: Task[]; runs: AgentRun[]; onRoute: (request: string) => void; onOpenAgent: (agent: Agent) => void }) {
   const actions = useContext(TaskContext);
   const [currentDay, setCurrentDay] = useState(() => dayKey(new Date()));
   useEffect(() => { const timer = setInterval(() => setCurrentDay(dayKey(new Date())), 30000); return () => clearInterval(timer); }, []);
   const activeTasks = todayTasks(tasks, currentDay);
-  return <div className="content"><section className="hero-grid"><div className="hero-copy"><span className="section-kicker">{new Intl.DateTimeFormat("en-US", { timeZone: calendarTimeZone, dateStyle: "full" }).format(new Date())}</span><h2>What deserves your<br /><em>attention</em> today?</h2><p>Your team has a clear view of the week. Start with the next small move.</p></div><div className="focus-card"><div className="focus-orbit"><span>◌</span><i>✦</i></div><div><span className="eyebrow">SUGGESTED NEXT</span><h3>{activeTasks[0]?.title ?? "No upcoming assignments"}</h3><p>{activeTasks[0] ? `${activeTasks[0].deadline ? `Due ${activeTasks[0].deadline}` : "No due date"} / ${activeTasks[0].priority} priority` : "Your focus list is clear"}</p><button className="text-button" onClick={() => activeTasks[0] ? actions.edit(activeTasks[0]) : onOpenAgent(getAgent("researcher")!)}>Open focus <span>↗</span></button></div></div></section><section className="ask-box"><div className="ask-icon">✦</div><div className="ask-input"><span>Ask your AI team...</span><small>Try “I want to improve my CV” or “What should I do today?”</small></div><button className="send-button" onClick={() => onRoute("What should I focus on today?")}>↗</button></section><div className="dashboard-grid"><section className="panel priority-panel"><div className="panel-heading"><div><span className="eyebrow">YOUR FOCUS</span><h3>Your priorities today</h3></div><button className="icon-button" onClick={() => actions.create(undefined, "", true)}>+</button></div><FocusAssignments calendarId={calendarId} tasks={allTasks} onCreateTask={onCreateTask} /><button className="panel-link" onClick={onViewTasks}>View all tasks <span>↗</span></button></section><section className="panel activity-panel"><div className="panel-heading"><div><span className="eyebrow">LIVE HANDOFFS</span><h3>Agent activity</h3></div><span className="live-pill"><i /> live</span></div>{runs.length === 0 ? <div className="empty-activity"><div className="empty-orbit">◌</div><p>No active handoffs yet.</p><small>Ask your team to see delegation happen here.</small></div> : runs.slice(0, 3).map((run) => <div className="activity-row" key={run.id}><div className="activity-avatars">{run.selectedAgents.slice(0, 2).map((id) => <Avatar key={id} agent={getAgent(id)} small />)}</div><div><strong>{run.userRequest}</strong><small>{run.selectedAgents.length - 1} agents · just now</small></div><span className="activity-arrow">↗</span></div>)}</section></div><section className="bottom-strip"><div><span className="eyebrow">UP NEXT</span><strong>Upcoming deadlines</strong></div><div className="deadline-list">{tasks.filter((task) => task.status !== "Done" && task.deadline > currentDay && !activeTasks.some((focused) => focused.id === task.id)).sort((a, b) => a.deadline.localeCompare(b.deadline)).slice(0, 3).map((task) => <div className="deadline" data-go-lesson={task.recurrence === "go-kus-thursday" || undefined} key={task.id}><span className="deadline-date">{task.deadline.slice(8)}<small>{task.deadline.slice(5, 7)}</small></span><div><strong>{task.title}</strong><small>{task.team} · {task.priority} priority</small></div></div>)}</div></section></div>;
+  return <div className="content"><section className="hero-grid"><div className="hero-copy"><span className="section-kicker">{new Intl.DateTimeFormat("en-US", { timeZone: calendarTimeZone, dateStyle: "full" }).format(new Date())}</span><h2>What deserves your<br /><em>attention</em> today?</h2><p>Your team has a clear view of the week. Start with the next small move.</p></div><div className="focus-card"><div className="focus-orbit"><span>◌</span><i>✦</i></div><div><span className="eyebrow">SUGGESTED NEXT</span><h3>{activeTasks[0]?.title ?? "No upcoming assignments"}</h3><p>{activeTasks[0] ? `${activeTasks[0].deadline ? `Due ${activeTasks[0].deadline}` : "No due date"} / ${activeTasks[0].priority} priority` : "Your focus list is clear"}</p><button className="text-button" onClick={() => activeTasks[0] ? actions.focus(activeTasks[0].id) : actions.create(undefined, "", true)}>Open focus <span>↗</span></button></div></div></section><section className="ask-box"><div className="ask-icon">✦</div><div className="ask-input"><span>Ask your AI team...</span><small>Try “I want to improve my CV” or “What should I do today?”</small></div><button className="send-button" onClick={() => onRoute("What should I focus on today?")}>↗</button></section><div className="dashboard-grid"><section className="panel priority-panel"><div className="panel-heading"><div><span className="eyebrow">YOUR FOCUS</span><h3>Your priorities today</h3></div><button className="icon-button" onClick={() => actions.create(undefined, "", true)}>+</button></div><FocusAssignments calendarId={calendarId} tasks={allTasks} onCreateTask={onCreateTask} /><button className="panel-link" onClick={onViewTasks}>View all tasks <span>↗</span></button></section><section className="panel activity-panel"><div className="panel-heading"><div><span className="eyebrow">LIVE HANDOFFS</span><h3>Agent activity</h3></div><span className="live-pill"><i /> live</span></div>{runs.length === 0 ? <div className="empty-activity"><div className="empty-orbit">◌</div><p>No active handoffs yet.</p><small>Ask your team to see delegation happen here.</small></div> : runs.slice(0, 3).map((run) => <div className="activity-row" key={run.id}><div className="activity-avatars">{run.selectedAgents.slice(0, 2).map((id) => <Avatar key={id} agent={getAgent(id)} small />)}</div><div><strong>{run.userRequest}</strong><small>{run.selectedAgents.length - 1} agents · just now</small></div><span className="activity-arrow">↗</span></div>)}</section></div><section className="bottom-strip"><div><span className="eyebrow">UP NEXT</span><strong>Upcoming deadlines</strong></div><div className="deadline-list">{tasks.filter((task) => task.status !== "Done" && task.deadline > currentDay && !activeTasks.some((focused) => focused.id === task.id)).sort((a, b) => a.deadline.localeCompare(b.deadline)).slice(0, 3).map((task) => <div className="deadline" data-go-lesson={task.recurrence === "go-kus-thursday" || undefined} key={task.id}><span className="deadline-date">{task.deadline.slice(8)}<small>{task.deadline.slice(5, 7)}</small></span><div><strong>{task.title}</strong><small>{task.team} · {task.priority} priority</small></div></div>)}</div></section></div>;
 }
 
 function TeamGrid({ onOpenAgent }: { onOpenAgent: (agent: Agent) => void }) { return <div className="content"><div className="view-intro"><div><span className="section-kicker">YOUR AI TEAM / 10 AGENTS</span><h2>Everyone has a<br /><em>part to play.</em></h2></div><p>Specialists, not a chatbot collection. Each agent has a role, a context, and a handoff.</p></div><div className="team-grid">{teamOrder.map((team) => <section className="team-section" key={team}><div className="team-heading"><div><span className="eyebrow">{teamMeta[team].eyebrow}</span><h3>{teamMeta[team].label}</h3></div><span className="team-count">{agents.filter((agent) => agent.team === team).length} agents</span></div><div className="agent-cards">{agents.filter((agent) => agent.team === team).map((agent) => <AgentCard agent={agent} key={agent.id} onClick={() => onOpenAgent(agent)} />)}</div></section>)}</div></div>; }

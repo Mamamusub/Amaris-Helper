@@ -205,3 +205,33 @@ test("weekly Go lessons use actual Thursdays, cross year boundaries and never re
   assert.equal(yearEnd[0].deadline, "2026-12-03"); assert.equal(yearEnd[5].deadline, "2027-01-07");
   assert.ok(yearEnd[5].title.includes("(2027/1/7)"));
 });
+
+test("subtasks support Enter, rename, completion, delete/Undo and persist progress after refresh", () => {
+  const h = harness(); h.storage.set("agent-helper.tasks", "[]"); h.storage.set("agent-helper.subjects", "[]"); h.render();
+  h.click("+"); h.field("Title", "Checklist test");
+  const input = () => h.findAll((n) => n.type === "input" && n.props["aria-label"] === "เพิ่มงานย่อย")[0];
+  for (const title of ["First", "Second"]) {
+    input().props.onChange({ target: { value: title } }); h.render();
+    input().props.onKeyDown({ key: "Enter", nativeEvent: { isComposing: false }, preventDefault() {} }); h.render();
+  }
+  const names = () => h.findAll((n) => n.type === "input" && n.props["aria-label"] === "ชื่องานย่อย");
+  names()[0].props.onChange({ target: { value: "Renamed" } }); h.render();
+  h.findAll((n) => n.props["aria-label"] === "เสร็จ: Renamed")[0].props.onChange({ target: { checked: true } }); h.render();
+  h.findAll((n) => n.type === "button" && n.props["aria-label"] === "ลบ Second")[0].props.onClick(); h.render();
+  h.click("ย้อนกลับ"); h.save(); h.refresh();
+  const saved = JSON.parse(h.storage.get("agent-helper.tasks"))[0];
+  assert.equal(saved.subtasks.length, 2); assert.equal(saved.subtasks[0].title, "Renamed"); assert.equal(saved.status, "Planned");
+  assert.equal(h.findAll((n) => n.type === "progress" && n.props.max === 2 && n.props.value === 1).length, 1);
+});
+
+test("recurrence completion through shared controls is persisted once and series deletion supports Undo", () => {
+  const h = harness(); const { dayKey, shiftDay } = h.load("src/lib/calendar.ts"); const today = dayKey(new Date());
+  h.storage.set("agent-helper.tasks", JSON.stringify([{ id: "series", title: "Repeat", description: "", team: "Study", assignedAgent: "researcher", deadline: today, status: "Planned", priority: "Medium", createdAt: today, updatedAt: today, repeat: { frequency: "daily", weekdays: [], anchor: today, timeZone: "Asia/Bangkok" } }]));
+  h.storage.set("agent-helper.subjects", "[]"); h.render(); h.click("Complete"); h.refresh();
+  const read = () => JSON.parse(h.storage.get("agent-helper.tasks"));
+  assert.equal(read().length, 2); assert.equal(read().find((task) => task.id !== "series").deadline, shiftDay(today, 1));
+  h.click("Delete"); h.click("รอบนี้และรอบถัดไป");
+  assert.equal(read().filter((task) => task.deletedAt).length, 1);
+  h.click("Undo"); assert.equal(read().filter((task) => task.deletedAt).length, 0);
+  assert.equal(read().find((task) => task.id !== "series").recurrenceHandled, false);
+});

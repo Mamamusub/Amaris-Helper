@@ -16,6 +16,15 @@ export type Agent = {
 };
 
 export type Task = {
+  repeat?: { frequency: "daily" | "weekly" | "monthly"; weekdays: number[]; anchor: string; until?: string; timeZone: string };
+  seriesId?: string;
+  occurrenceDate?: string;
+  recurrenceHandled?: boolean;
+  skipBefore?: string;
+  nextTemplate?: Pick<Task, "title" | "description" | "subtasks" | "repeat" | "color" | "priority" | "subjectId" | "team" | "assignedAgent">;
+  deletionBatch?: string;
+  recurrenceWasHandled?: boolean;
+  focusSessions?: { id: string; startedAt: number; endedAt: number; elapsedMs: number; note: string; intervals?: { start: number; end: number }[] }[];
   recurrence?: "go-kus-thursday";
   id: string;
   title: string;
