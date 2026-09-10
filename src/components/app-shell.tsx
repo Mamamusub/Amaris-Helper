@@ -100,6 +100,15 @@ function LoadedAppShell() {
     catch { setSaveError("Could not save subjects. Free browser storage and try again."); return false; }
   };
   const addTask = (task: Task) => { if (!storedTasks.some((item) => item.id === task.id)) commitTasks([task, ...storedTasks]); };
+  const saveGoLessonTasks = (additions: Task[]) => {
+    if (!additions.length) return;
+    const existing = subjects.find((subject) => subject.name.trim().toLowerCase() === "โกะ");
+    const goSubject = existing ?? { id: "subject-go-kus", name: "โกะ", color: "#f4a261", nextEvent: "ทุกวันพฤหัสบดี", context: "ตารางสอนโกะ kus ทุกวันพฤหัสบดี" };
+    if (!existing && !commitSubjects([...subjects, goSubject])) return;
+    const linked = additions.map((task) => ({ ...task, subjectId: goSubject.id }));
+    if (cloud) cloud.import(linked.map((task) => ({ kind: "task" as const, id: task.id, data: task, version: 0 })));
+    else commitTasks([...linked, ...storedTasks]);
+  };
   const update = (id: string, patch: Partial<Task>) => commitTasks(updateTask(storedTasks, id, patch));
   const create = (subjectId?: string, deadline = "", focused = false) => {
     const now = new Date().toISOString();
@@ -133,9 +142,9 @@ function LoadedAppShell() {
     setView("pipeline");
     return started;
   };
-  return <TaskContext.Provider value={{ focus: setFocusId, subjects, addSubject: (subject) => { if (subjects.some((item) => item.name.trim().toLowerCase() === subject.name.trim().toLowerCase())) return false; return commitSubjects([...subjects, subject]); }, deleteSubject: (id) => { const saved = commitSubjects(subjects.filter((subject) => subject.id !== id)); if (saved && subjectId === id) setSubjectId(null); return saved; }, update, create, edit: (task) => { setEditorVersion(cloud?.version("task", task.id) ?? 0); setEditor(task); }, openSubject, remove: (id) => { if (storedTasks.find((task) => task.id === id)?.repeat) { setDeleteId(id); return; } if (commitTasks(updateTask(storedTasks, id, { deletedAt: new Date().toISOString() }))) setUndoIds((ids) => [...ids, id]); } }}><div className="app-frame">
+  return <TaskContext.Provider value={{ focus: setFocusId, subjects, addSubject: (subject) => { if (subjects.some((item) => item.name.trim().toLowerCase() === subject.name.trim().toLowerCase())) return false; return commitSubjects([...subjects, subject]); }, deleteSubject: (id) => { const nextTasks = storedTasks.map((task) => task.subjectId === id ? { ...task, subjectId: undefined } : task); if (JSON.stringify(nextTasks) !== JSON.stringify(storedTasks) && !commitTasks(nextTasks)) return false; const saved = commitSubjects(subjects.filter((subject) => subject.id !== id)); if (saved && subjectId === id) setSubjectId(null); return saved; }, update, create, edit: (task) => { setEditorVersion(cloud?.version("task", task.id) ?? 0); setEditor(task); }, openSubject, remove: (id) => { if (storedTasks.find((task) => task.id === id)?.repeat) { setDeleteId(id); return; } if (commitTasks(updateTask(storedTasks, id, { deletedAt: new Date().toISOString() }))) setUndoIds((ids) => [...ids, id]); } }}><div className="app-frame">
     <Sidebar view={view} setView={setView} taskCount={tasks.filter((task) => task.status !== "Done").length} />
-    <main className="main-stage"><RecurringTasks tasks={storedTasks} save={(additions) => { if (cloud) cloud.import(additions.map((task) => ({ kind: "task", id: task.id, data: { ...task }, version: 0 }))); else commitTasks([...additions, ...storedTasks]); }} /><CalendarReturnNotice onSettings={() => setView("settings")} />
+    <main className="main-stage"><RecurringTasks tasks={storedTasks} save={saveGoLessonTasks} /><CalendarReturnNotice onSettings={() => setView("settings")} />
       <header className="topbar"><div><span className="eyebrow">PERSONAL AI TEAM / AMARIS</span><h1>{view === "dashboard" ? "Good morning, Pai." : (view === "settings" ? "Settings" : navItems.find((item) => item.id === view)?.label)}</h1></div><div className="topbar-actions"><span className="status-dot" /> <span className="muted">Personal workspace</span><button className="avatar-button" aria-label="Pai profile">P</button></div></header>
     {storedTasks.filter((task) => task.repeat && !task.recurrenceHandled && (task.status === "Done" || task.deletedAt) && nextForTask(task) && nextForTask(task)! < recurrenceToday(task.repeat)).map((task) => <div className="missed-round" role="status" key={task.id}><strong>{task.title}</strong><p>มีรอบที่พลาดตั้งแต่ {nextForTask(task)} · ยังไม่ได้สร้างงานค้าง</p><button className="secondary-button" onClick={() => update(task.id, { skipBefore: nextForTask(task)! })}>ทำรอบที่พลาดถัดไป</button><button className="primary-button" onClick={() => update(task.id, { skipBefore: recurrenceToday(task.repeat!) })}>ข้ามไปวันนี้หรือรอบถัดไป</button></div>)}
       {saveError && <div className="notice" role="alert">{saveError}</div>}
@@ -154,7 +163,7 @@ function LoadedAppShell() {
       {view === "settings" && <SettingsView />}
     </main>
     {selectedAgent && <AgentWorkspaceV3 agent={selectedAgent} messages={messages[selectedAgent.id] ?? []} setMessages={setMessages} onClose={() => setSelectedAgent(null)} onCreateTask={(task) => addTask({ ...task, subjectId: subjects.some((subject) => subject.id === selectedAgent.id) ? selectedAgent.id : task.subjectId })} onRoute={routeRequest} />}
-    {editor && <TaskEditor tasks={storedTasks} recurringAction={!storedTasks.some((task) => task.id === editor.id) ? <GoLessonButton tasks={storedTasks} save={(additions) => { if (cloud) cloud.import(additions.map((task) => ({ kind: "task", id: task.id, data: { ...task }, version: 0 }))); else commitTasks([...additions, ...storedTasks]); }} /> : undefined} key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task, scope) => {
+    {editor && <TaskEditor tasks={storedTasks} recurringAction={!storedTasks.some((task) => task.id === editor.id) ? <GoLessonButton tasks={storedTasks} save={saveGoLessonTasks} /> : undefined} key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task, scope) => {
       const next = editRecurring(storedTasks, task, scope);
       if (commitTasks(next, { [task.id]: editorVersion })) {
         const deleted = next.filter((item) => item.deletedAt && !storedTasks.find((old) => old.id === item.id)?.deletedAt).map((item) => item.id);
