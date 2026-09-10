@@ -36,18 +36,24 @@ test("weekly multiple weekdays, daily rollover, inclusive end and timezone/DST b
 });
 const base = { id: "one", title: "Task", description: "Keep history", deadline: "2026-09-10", occurrenceDate: "2026-09-10", status: "Done", repeat: rule("daily", "2026-09-10"), subtasks: [{ id: "s", title: "Step", done: true }], sourceEventId: "google", focusSessions: [{ id: "old" }] };
 
-test("monthly task counts group dated Go lessons and count completed tasks once", () => {
-  const { monthlyTaskCounts } = load("src/lib/task-counts.ts");
-  const lesson = { ...base, title: "📚 (2026/9/10) สอนโกะ kus", recurrence: "go-kus-thursday" };
-  const tasks = [lesson, lesson, { ...lesson, id: "two", deadline: "2026-09-17", status: "Planned" },
-    { ...lesson, id: "deleted", deletedAt: "yes" }, { ...lesson, id: "next", deadline: "2026-10-01" },
-    { ...lesson, id: "undated", deadline: "" }, { ...lesson, id: "manual", recurrence: undefined, title: "📚 (2026/9/24) สอนโกะ kus", deadline: "2026-09-24" }];
-  const [row] = monthlyTaskCounts(tasks, "2026-09");
-  assert.equal(row.title, "สอนโกะ kus"); assert.equal(row.total, 3); assert.equal(row.completed, 2); assert.equal(row.pending, 1);
-  assert.equal(monthlyTaskCounts(tasks, "2026-10")[0].total, 1);
-  assert.equal(monthlyTaskCounts(tasks, "").length, 0);
-  assert.equal(monthlyTaskCounts(tasks.map((task) => ({ ...task, status: "Planned" })), "2026-09")[0].completed, 0);
+test("subject calendar counts completed tasks by day and subject, excluding deleted and duplicate tasks", () => {
+  const { subjectMonth, shiftMonth } = load("src/lib/subject-counts.ts");
+  const task = { ...base, subjectId: "go" };
+  const tasks = [task, task, { ...task, id: "two" }, { ...task, id: "other", subjectId: "math" },
+    { ...task, id: "pending", status: "Planned" }, { ...task, id: "deleted", deletedAt: "yes" },
+    { ...task, id: "next", deadline: "2026-10-01" }, { ...task, id: "undated", deadline: "" }];
+  const month = subjectMonth(tasks, "go", "2026-09");
+  assert.equal(month.count, 2); assert.equal(month.days.length, 30); assert.equal(month.offset, 1);
+  assert.equal(month.days[9].tasks.length, 2); assert.equal(month.days[8].tasks.length, 0);
+  assert.equal(subjectMonth(tasks, "go", "2026-10").count, 1);
+  assert.equal(subjectMonth(tasks.map((item) => ({ ...item, status: "Planned" })), "go", "2026-09").count, 0);
+  assert.equal(subjectMonth([], "go", "2028-02").days.length, 29);
+  assert.equal(subjectMonth([], "go", "bad").days.length, 0);
+  assert.equal(shiftMonth("2026-01", -1), "2025-12");
+  assert.equal(shiftMonth("2026-12", 1), "2027-01");
 });
+
+
 test("completion creates exactly one stable round, resets checklist and Calendar binding, preserves history", () => {
   const now = new Date("2026-09-10T00:00:00Z");
   const result = advanceRecurring([base], now);

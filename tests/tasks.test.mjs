@@ -76,6 +76,26 @@ function harness() {
   return { failWrites() { failWrites = true; }, storage, load, render, click, field, save, findAll, text, refresh() { hooks.clear(); render(); } };
 }
 
+test("Study Count shows subject history, selected-day tasks and previous months", () => {
+  const h = harness();
+  const month = h.load("src/lib/calendar.ts").dayKey(new Date()).slice(0, 7);
+  h.storage.set("agent-helper.subjects", JSON.stringify([{ id: "go", name: "Go", context: "", color: "#abc", nextEvent: "" }]));
+  h.storage.set("agent-helper.tasks", JSON.stringify([{ id: "lesson", title: "Go lesson", subjectId: "go", assignedAgent: "researcher", team: "Study", status: "Done", priority: "Low", deadline: `${month}-03`, createdAt: "old", updatedAt: "old" }]));
+  h.render(); h.click("Study");
+  h.findAll((n) => n.props.className === "subject-card")[0].props.onClick(); h.render();
+  const count = () => h.findAll((n) => n.props.className === "subject-count")[0];
+  assert.ok(count());
+  assert.equal(h.findAll((n) => n.type === "strong", h.findAll((n) => n.props.className === "subject-count-total")[0]).map(h.text).join(""), "1");
+  h.findAll((n) => n.props["aria-label"] === `${month}-03 · 1 ครั้ง`)[0].props.onClick(); h.render();
+  assert.ok(h.text(h.findAll((n) => n.props.className === "subject-count-detail")[0]).includes("Go lesson"));
+  h.findAll((n) => n.props["aria-label"] === "เดือนก่อนหน้า")[0].props.onClick(); h.render();
+  assert.ok(h.text(count()).includes("ยังไม่มีประวัติ"));
+  h.findAll((n) => n.props["aria-label"] === "เดือนถัดไป")[0].props.onClick(); h.render();
+  h.click("Reopen");
+  assert.ok(h.text(count()).includes("ยังไม่มีประวัติ"));
+  h.click("Tasks1"); assert.equal(h.findAll((n) => n.props.className === "subject-count" || n.props.className === "panel task-counts").length, 0);
+});
+
 test("shared task lifecycle across Study, Tasks, Calendar, Today and refresh", () => {
   const h = harness();
   const { dayKey, shiftDay } = h.load("src/lib/calendar.ts");
