@@ -24,7 +24,7 @@ import RecurringTasks, { GoLessonButton } from "@/components/recurring-tasks";
 
 type View = "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "career" | "development" | "port" | "settings";
 const navItems: { id: View; label: string; icon: string }[] = [
-  { id: "dashboard", label: "Today", icon: "⌂" }, { id: "teams", label: "Team grid", icon: "◈" }, { id: "pipeline", label: "Pipeline", icon: "⌁" }, { id: "tasks", label: "Tasks", icon: "✓" }, { id: "calendar", label: "Calendar", icon: "▦" }, { id: "study", label: "Study", icon: "✦" }, { id: "career", label: "Career", icon: "↗" }, { id: "development", label: "Build lab", icon: "⌘" }, { id: "port", label: "Port", icon: "⇄" },
+  { id: "dashboard", label: "Today", icon: "⌂" }, { id: "teams", label: "Team grid", icon: "◈" }, { id: "pipeline", label: "Pipeline", icon: "⌁" }, { id: "tasks", label: "Tasks", icon: "✓" }, { id: "calendar", label: "Calendar", icon: "▦" }, { id: "study", label: "Study", icon: "✦" }, { id: "career", label: "Career", icon: "↗" }, { id: "development", label: "Build lab", icon: "⌘" }, { id: "port", label: "Investment", icon: "⇄" },
 ];
 
 const teamOrder: Team[] = ["Orchestrator", "Shared", "Career", "Development"];
