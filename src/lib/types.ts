@@ -60,6 +60,7 @@ export type Subject = {
   color: string;
   nextEvent: string;
   context: string;
+  deletedAt?: string;
 };
 
 export type ChatMessage = {

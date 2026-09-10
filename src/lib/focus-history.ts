@@ -32,11 +32,11 @@ export function focusHistory(tasks: Task[], subjects: Subject[], zone = calendar
   return tasks.flatMap((task) => (task.focusSessions ?? []).flatMap((record): HistoryRow[] => {
     if (!record.id || seen.has(record.id) || !Number.isFinite(record.elapsedMs) || record.elapsedMs <= 0) return [];
     seen.add(record.id);
-    const subject = subjects.find((item) => item.id === task.subjectId);
     const subjectId = record.snapshot ? record.snapshot.subjectId : task.subjectId;
+    const subject = subjects.find((item) => item.id === task.subjectId);
     const completeIntervals = record.intervals?.length && record.intervals.every((span) => validStamp(span.start) && validStamp(span.end) && span.end >= span.start) && Math.abs(record.intervals.reduce((sum, span) => sum + span.end - span.start, 0) - record.elapsedMs) < 1;
     const pausedMs = Number.isFinite(record.pausedMs) && record.pausedMs! >= 0 ? record.pausedMs! : completeIntervals && validStamp(record.startedAt) && validStamp(record.endedAt) && record.endedAt - record.startedAt >= record.elapsedMs ? record.endedAt - record.startedAt - record.elapsedMs : null;
-    return [{ record, task, title: record.snapshot?.taskTitle ?? task.title, day: validStamp(record.startedAt) ? historyDay(record.startedAt, zone) : null, subjectId: subjectId ?? "__unassigned", subjectName: subjectId ? (record.snapshot?.subjectName ?? subject?.name ?? "วิชาที่ไม่มีข้อมูลชื่อ") : "ไม่ระบุวิชา", color: record.snapshot ? record.snapshot.subjectColor : subject?.color, pausedMs }];
+    return [{ record, task, title: record.snapshot?.taskTitle ?? task.title, day: validStamp(record.startedAt) ? historyDay(record.startedAt, zone) : null, subjectId: subjectId ?? "__unassigned", subjectName: subjectId ? (subject?.name ?? record.snapshot?.subjectName ?? "วิชาที่ไม่มีข้อมูลชื่อ") : "ไม่ระบุวิชา", color: record.snapshot ? record.snapshot.subjectColor : subject?.color, pausedMs }];
   })).sort((a, b) => (b.record.startedAt || 0) - (a.record.startedAt || 0));
 }
 export function summarizeFocus(rows: HistoryRow[], range: FocusRange, subjects: Subject[] = []) {

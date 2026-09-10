@@ -109,7 +109,12 @@ function LoadedAppShell() {
     if (cloud) cloud.import(linked.map((task) => ({ kind: "task" as const, id: task.id, data: task, version: 0 })));
     else commitTasks([...linked, ...storedTasks]);
   };
-  const update = (id: string, patch: Partial<Task>) => commitTasks(updateTask(storedTasks, id, patch));
+  const update = (id: string, patch: Partial<Task>) => {
+    const current = storedTasks.find((task) => task.id === id);
+    const subject = patch.subjectId ? subjects.find((item) => item.id === patch.subjectId) : undefined;
+    const focusSessions = subject && current?.focusSessions?.map((record) => record.snapshot?.subjectId === null ? { ...record, snapshot: { ...record.snapshot, subjectId: subject.id, subjectName: subject.name, subjectColor: subject.color } } : record);
+    return commitTasks(updateTask(storedTasks, id, { ...patch, ...(focusSessions ? { focusSessions } : {}) }));
+  };
   const create = (subjectId?: string, deadline = "", focused = false) => {
     const now = new Date().toISOString();
     setEditorVersion(0);
@@ -142,7 +147,7 @@ function LoadedAppShell() {
     setView("pipeline");
     return started;
   };
-  return <TaskContext.Provider value={{ focus: setFocusId, subjects, addSubject: (subject) => { if (subjects.some((item) => item.name.trim().toLowerCase() === subject.name.trim().toLowerCase())) return false; return commitSubjects([...subjects, subject]); }, deleteSubject: (id) => { const nextTasks = storedTasks.map((task) => task.subjectId === id ? { ...task, subjectId: undefined } : task); if (JSON.stringify(nextTasks) !== JSON.stringify(storedTasks) && !commitTasks(nextTasks)) return false; const saved = commitSubjects(subjects.filter((subject) => subject.id !== id)); if (saved && subjectId === id) setSubjectId(null); return saved; }, update, create, edit: (task) => { setEditorVersion(cloud?.version("task", task.id) ?? 0); setEditor(task); }, openSubject, remove: (id) => { if (storedTasks.find((task) => task.id === id)?.repeat) { setDeleteId(id); return; } if (commitTasks(updateTask(storedTasks, id, { deletedAt: new Date().toISOString() }))) setUndoIds((ids) => [...ids, id]); } }}><div className="app-frame">
+  return <TaskContext.Provider value={{ focus: setFocusId, subjects, addSubject: (subject) => { if (subjects.some((item) => item.name.trim().toLowerCase() === subject.name.trim().toLowerCase())) return false; return commitSubjects([...subjects, subject]); }, deleteSubject: (id) => { const deletedSubject = subjects.find((subject) => subject.id === id); if (!deletedSubject) return false; const nextTasks = storedTasks.map((task) => task.subjectId === id ? { ...task, subjectId: undefined } : task); if (JSON.stringify(nextTasks) !== JSON.stringify(storedTasks) && !commitTasks(nextTasks)) return false; const saved = cloud ? cloud.enqueue("subject", [{ ...deletedSubject, deletedAt: new Date().toISOString() }]) : commitSubjects(subjects.filter((subject) => subject.id !== id)); if (saved && subjectId === id) setSubjectId(null); return saved; }, update, create, edit: (task) => { setEditorVersion(cloud?.version("task", task.id) ?? 0); setEditor(task); }, openSubject, remove: (id) => { if (storedTasks.find((task) => task.id === id)?.repeat) { setDeleteId(id); return; } if (commitTasks(updateTask(storedTasks, id, { deletedAt: new Date().toISOString() }))) setUndoIds((ids) => [...ids, id]); } }}><div className="app-frame">
     <Sidebar view={view} setView={setView} taskCount={tasks.filter((task) => task.status !== "Done").length} />
     <main className="main-stage"><RecurringTasks tasks={storedTasks} save={saveGoLessonTasks} /><CalendarReturnNotice onSettings={() => setView("settings")} />
       <header className="topbar"><div><span className="eyebrow">PERSONAL AI TEAM / AMARIS</span><h1>{view === "dashboard" ? "Good morning, Pai." : (view === "settings" ? "Settings" : navItems.find((item) => item.id === view)?.label)}</h1></div><div className="topbar-actions"><span className="status-dot" /> <span className="muted">Personal workspace</span><button className="avatar-button" aria-label="Pai profile">P</button></div></header>
@@ -164,7 +169,9 @@ function LoadedAppShell() {
     </main>
     {selectedAgent && <AgentWorkspaceV3 agent={selectedAgent} messages={messages[selectedAgent.id] ?? []} setMessages={setMessages} onClose={() => setSelectedAgent(null)} onCreateTask={(task) => addTask({ ...task, subjectId: subjects.some((subject) => subject.id === selectedAgent.id) ? selectedAgent.id : task.subjectId })} onRoute={routeRequest} />}
     {editor && <TaskEditor tasks={storedTasks} recurringAction={!storedTasks.some((task) => task.id === editor.id) ? <GoLessonButton tasks={storedTasks} save={saveGoLessonTasks} /> : undefined} key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task, scope) => {
-      const next = editRecurring(storedTasks, task, scope);
+      const subject = task.subjectId ? subjects.find((item) => item.id === task.subjectId) : undefined;
+      const taskWithFocusSubject = subject && task.focusSessions ? { ...task, focusSessions: task.focusSessions.map((record) => record.snapshot?.subjectId === null ? { ...record, snapshot: { ...record.snapshot, subjectId: subject.id, subjectName: subject.name, subjectColor: subject.color } } : record) } : task;
+      const next = editRecurring(storedTasks, taskWithFocusSubject, scope);
       if (commitTasks(next, { [task.id]: editorVersion })) {
         const deleted = next.filter((item) => item.deletedAt && !storedTasks.find((old) => old.id === item.id)?.deletedAt).map((item) => item.id);
         setUndoIds((ids) => [...ids, ...deleted]);
