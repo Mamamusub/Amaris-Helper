@@ -6,7 +6,7 @@ export class AIError extends Error {
   constructor(message: string, public status = 502) { super(message); }
 }
 function apiKey() {
-  return process.env.OPENAI_API_KEY?.trim() || process.env.AI_API_KEY?.trim() || "";
+  return process.env.AI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || "";
 }
 export function aiConfiguration() {
   const provider = process.env.AI_PROVIDER?.trim().toLowerCase() || "openai";
@@ -15,7 +15,7 @@ export function aiConfiguration() {
 export function getAIProvider(): AIProvider {
   const config = aiConfiguration();
   if (config.provider !== "openai") throw new AIError("ตั้ง AI_PROVIDER=openai ใน .env.local แล้วรีสตาร์ตเซิร์ฟเวอร์ก่อนใช้งาน AI", 503);
-  if (!config.configured) throw new AIError("ไม่พบ API key บนเซิร์ฟเวอร์ ตั้ง OPENAI_API_KEY หรือ AI_API_KEY ใน .env.local แล้วรีสตาร์ตเซิร์ฟเวอร์", 503);
+  if (!config.configured) throw new AIError("ไม่พบ API key บนเซิร์ฟเวอร์ ตั้ง AI_API_KEY (หรือ OPENAI_API_KEY สำรอง) ใน Environment Variables ของ Vercel แล้ว Deploy ใหม่ หรือใน .env.local สำหรับเครื่องนี้", 503);
   return {
     name: `OpenAI · ${config.model}`,
     async generate({ systemPrompt, message, context, images = [], signal, schema }) {

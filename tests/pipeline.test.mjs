@@ -40,7 +40,7 @@ test("OpenAI configuration defaults to OpenAI and normalizes explicit provider v
   assert.throws(() => getAIProvider(), /AI_PROVIDER=openai/);
 });
 
-test("blank primary key falls back to trimmed AI_API_KEY for authentication", async () => {
+test("AI_API_KEY works without OPENAI_API_KEY", async () => {
   env.OPENAI_API_KEY = "   ";
   env.AI_API_KEY = " fallback-key ";
   fetchMock = async (_url, init) => {
@@ -50,6 +50,20 @@ test("blank primary key falls back to trimmed AI_API_KEY for authentication", as
   assert.equal(await getAIProvider().generate({ systemPrompt: "test", message: "request" }), "done");
   env.AI_API_KEY = " ";
   assert.throws(() => getAIProvider(), /OPENAI_API_KEY/);
+});
+
+test("AI_API_KEY takes precedence when both keys exist, with a legacy fallback when blank", async () => {
+  env.AI_API_KEY = " actual-key ";
+  env.OPENAI_API_KEY = "old-key";
+  let expectedKey = "actual-key";
+  fetchMock = async (_url, init) => {
+    assert.equal(init.headers.Authorization, `Bearer ${expectedKey}`);
+    return Response.json({ status: "completed", output: [{ content: [{ type: "output_text", text: "done" }] }] });
+  };
+  assert.equal(await getAIProvider().generate({ systemPrompt: "test", message: "request" }), "done");
+  env.AI_API_KEY = " ";
+  expectedKey = "old-key";
+  assert.equal(await getAIProvider().generate({ systemPrompt: "test", message: "request" }), "done");
 });
 
 test("Pipeline executes specialists in order with prior work and images, then a final answer", async () => {
