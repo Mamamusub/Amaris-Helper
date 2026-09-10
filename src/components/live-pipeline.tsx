@@ -43,6 +43,9 @@ export default function LivePipeline({ onCreateTask }: { onCreateTask: (task: Ta
     } catch (runError) {
       setError(runError instanceof DOMException && runError.name === "AbortError" ? "Agent ใช้เวลานานเกินไป กรุณาลองใหม่หรือลดความยาวคำสั่ง" : runError instanceof Error ? runError.message : "เกิดข้อผิดพลาด กรุณาลองใหม่");
       setStatus("failed");
+    } finally {
+      timers.current.forEach((timer) => window.clearTimeout(timer));
+      timers.current = [];
     }
   }
 

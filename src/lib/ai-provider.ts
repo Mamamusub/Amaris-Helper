@@ -5,12 +5,17 @@ export type AIProvider = { name: string; generate(input: GenerateInput): Promise
 export class AIError extends Error {
   constructor(message: string, public status = 502) { super(message); }
 }
+function apiKey() {
+  return process.env.OPENAI_API_KEY?.trim() || process.env.AI_API_KEY?.trim() || "";
+}
 export function aiConfiguration() {
-  return { provider: "openai", model: process.env.OPENAI_MODEL || "gpt-4.1-mini", configured: Boolean((process.env.OPENAI_API_KEY || process.env.AI_API_KEY)?.trim()) && process.env.AI_PROVIDER === "openai" };
+  const provider = process.env.AI_PROVIDER?.trim().toLowerCase() || "openai";
+  return { provider, model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini", configured: Boolean(apiKey()) && provider === "openai" };
 }
 export function getAIProvider(): AIProvider {
   const config = aiConfiguration();
-  if (!config.configured) throw new AIError("ตั้ง AI_PROVIDER=openai และ OPENAI_API_KEY ใน .env.local แล้วรีสตาร์ตเว็บก่อนใช้งาน Pipeline", 503);
+  if (config.provider !== "openai") throw new AIError("ตั้ง AI_PROVIDER=openai ใน .env.local แล้วรีสตาร์ตเซิร์ฟเวอร์ก่อนใช้งาน AI", 503);
+  if (!config.configured) throw new AIError("ไม่พบ API key บนเซิร์ฟเวอร์ ตั้ง OPENAI_API_KEY หรือ AI_API_KEY ใน .env.local แล้วรีสตาร์ตเซิร์ฟเวอร์", 503);
   return {
     name: `OpenAI · ${config.model}`,
     async generate({ systemPrompt, message, context, images = [], signal, schema }) {
@@ -18,7 +23,7 @@ export function getAIProvider(): AIProvider {
       try {
         response = await fetch("https://api.openai.com/v1/responses", {
           method: "POST", cache: "no-store", redirect: "error",
-          headers: { Authorization: `Bearer ${(process.env.OPENAI_API_KEY || process.env.AI_API_KEY)!.trim()}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
           signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(90000)]) : AbortSignal.timeout(90000),
           body: JSON.stringify({ model: config.model, store: false, max_output_tokens: schema ? 1400 : 3000,
             instructions: systemPrompt,

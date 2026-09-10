@@ -29,7 +29,28 @@ const { executePipeline, readPipelineRequest } = load("src/lib/pipeline-engine.t
 const { consumePipeline } = load("src/lib/pipeline-stream.ts");
 const plan = { summary: "Owl drafts and Eagle reviews", steps: [{ agentId: "researcher", task: "Draft answer" }, { agentId: "reviewer", task: "Check answer" }] };
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aAvsAAAAASUVORK5CYII=";
-beforeEach(() => { env.AI_PROVIDER = "openai"; env.OPENAI_API_KEY = "test-key"; fetchMock = () => { throw new Error("Unexpected external request"); }; });
+beforeEach(() => { env.AI_PROVIDER = "openai"; env.OPENAI_API_KEY = "test-key"; delete env.AI_API_KEY; fetchMock = () => { throw new Error("Unexpected external request"); }; });
+
+test("OpenAI configuration defaults to OpenAI and normalizes explicit provider values", () => {
+  delete env.AI_PROVIDER;
+  assert.ok(getAIProvider());
+  env.AI_PROVIDER = " OpenAI ";
+  assert.ok(getAIProvider());
+  env.AI_PROVIDER = "manual";
+  assert.throws(() => getAIProvider(), /AI_PROVIDER=openai/);
+});
+
+test("blank primary key falls back to trimmed AI_API_KEY for authentication", async () => {
+  env.OPENAI_API_KEY = "   ";
+  env.AI_API_KEY = " fallback-key ";
+  fetchMock = async (_url, init) => {
+    assert.equal(init.headers.Authorization, "Bearer fallback-key");
+    return Response.json({ status: "completed", output: [{ content: [{ type: "output_text", text: "done" }] }] });
+  };
+  assert.equal(await getAIProvider().generate({ systemPrompt: "test", message: "request" }), "done");
+  env.AI_API_KEY = " ";
+  assert.throws(() => getAIProvider(), /OPENAI_API_KEY/);
+});
 
 test("Pipeline executes specialists in order with prior work and images, then a final answer", async () => {
   const calls = [];
