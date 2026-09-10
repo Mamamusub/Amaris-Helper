@@ -9,12 +9,13 @@ import type { Subject, Task } from "@/lib/types";
 export const TaskContext = createContext<{
   focus: (id: string) => void;
   subjects: Subject[];
+  addSubject: (subject: Subject) => boolean;
   update: (id: string, patch: Partial<Task>) => void;
   remove: (id: string) => void;
   edit: (task: Task) => void;
   create: (subjectId?: string, deadline?: string, focused?: boolean) => void;
   openSubject: (id: string) => void;
-}>({ focus() {}, subjects: [], update() {}, remove() {}, edit() {}, create() {}, openSubject() {} });
+}>({ focus() {}, subjects: [], addSubject: () => false, update() {}, remove() {}, edit() {}, create() {}, openSubject() {} });
 
 export function TaskControls({ task }: { task: Task }) {
   const actions = useContext(TaskContext);
@@ -42,7 +43,9 @@ export function canonicalTaskTitle(title: string) {
 export function TaskEditor({ task, tasks = [], onSave, onClose, recurringAction }: { task: Task; tasks?: Task[]; onSave: (task: Task, scope?: "this" | "future") => void; onClose: () => void; recurringAction?: ReactNode }) {
   const [draft, setDraft] = useState(task);
   const [scope, setScope] = useState<"this" | "future">("future");
-  const { subjects } = useContext(TaskContext);
+  const [addingSubject, setAddingSubject] = useState(false);
+  const [newSubjectName, setNewSubjectName] = useState("");
+  const { subjects, addSubject } = useContext(TaskContext);
   const titleOptions = Array.from(new Set(tasks.map((item) => canonicalTaskTitle(item.title)).filter(Boolean)));
   return <div className="workspace-overlay" role="dialog" aria-modal="true" aria-label="Edit task" onKeyDown={(event) => dialogKeyboard(event, onClose)}><form className="panel task-editor" onSubmit={(event) => { event.preventDefault(); if (draft.title.trim()) onSave({ ...draft, title: draft.title.trim(), ...(draft.repeat && scope === "future" && draft.deadline !== task.deadline ? { repeat: { ...draft.repeat, anchor: draft.deadline }, occurrenceDate: draft.deadline } : {}), subtasks: (draft.subtasks ?? []).filter((item) => item.title.trim()) }, scope); }}>
     <div className="panel-heading"><h3>Task details</h3><button type="button" className="close-button" onClick={onClose} aria-label="Close task editor">×</button></div>
@@ -59,7 +62,7 @@ export function TaskEditor({ task, tasks = [], onSave, onClose, recurringAction 
     <label>Due date<input type="date" required={!!draft.repeat} value={draft.deadline} onChange={(event) => setDraft({ ...draft, deadline: event.target.value })} /></label>
     <label>Priority<select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value as Task["priority"] })}>{["High", "Medium", "Low"].map((value) => <option key={value}>{value}</option>)}</select></label>
     <label>Status<select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as Task["status"] })}>{["Inbox", "Planned", "In Progress", "Waiting", "Done"].map((value) => <option key={value}>{value}</option>)}</select></label>
-    <label>Subject<select value={draft.subjectId ?? ""} onChange={(event) => setDraft({ ...draft, subjectId: event.target.value || undefined, team: event.target.value ? "Study" : draft.team })}><option value="">No subject</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label>
+    <label>Subject<select value={addingSubject ? "__add_subject__" : (draft.subjectId ?? "")} onChange={(event) => { if (event.target.value === "__add_subject__") { setAddingSubject(true); return; } setAddingSubject(false); setDraft({ ...draft, subjectId: event.target.value || undefined, team: event.target.value ? "Study" : draft.team }); }}><option value="">No subject</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}<option value="__add_subject__">+ Add subject</option></select>{addingSubject && <div className="task-subject-add"><input autoFocus value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} placeholder="Subject name" aria-label="New subject name" /><button type="button" className="secondary-button" onClick={() => { const name = newSubjectName.trim(); if (!name) return; const subject: Subject = { id: `subject-${Date.now()}`, name, color: "#9ee7d4", nextEvent: "No exam date", context: "New subject context. Add notes in its workspace." }; if (addSubject(subject)) { setDraft({ ...draft, subjectId: subject.id, team: "Study" }); setNewSubjectName(""); setAddingSubject(false); } }}>Add subject</button></div>}</label>
     <label><input type="checkbox" checked={!!draft.focused} onChange={(event) => setDraft({ ...draft, focused: event.target.checked })} /> Focus today</label>
     <button className="primary-button" type="submit">Save task</button>
   </form></div>;
