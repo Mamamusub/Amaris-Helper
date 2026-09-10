@@ -36,6 +36,21 @@ test("weekly multiple weekdays, daily rollover, inclusive end and timezone/DST b
 });
 const base = { id: "one", title: "Task", description: "Keep history", deadline: "2026-09-10", occurrenceDate: "2026-09-10", status: "Done", repeat: rule("daily", "2026-09-10"), subtasks: [{ id: "s", title: "Step", done: true }], sourceEventId: "google", focusSessions: [{ id: "old" }] };
 
+test("Go KUS descriptions migrate once, including future templates, without changing other lessons", () => {
+  const { migrateGoDescriptions, goLessons } = load("src/lib/recurring-tasks.ts");
+  const original = { ...base, title: "สอนโกะที่ kus", nextTemplate: { description: "Old" } };
+  const other = { ...base, id: "other", title: "สอนโกะที่อื่น" };
+  const [updated, unchanged] = migrateGoDescriptions([original, other]);
+  assert.equal(updated.description, "ที่ kus");
+  assert.equal(updated.nextTemplate.description, "ที่ kus");
+  assert.equal(updated.focusSessions, original.focusSessions);
+  assert.equal(updated.deadline, original.deadline);
+  assert.equal(unchanged, other);
+  const edited = { ...updated, description: "Later edit" };
+  assert.equal(migrateGoDescriptions([edited])[0], edited);
+  assert.ok(goLessons([], "2026-09-11", true).every((task) => task.description === "ที่ kus"));
+});
+
 test("subject calendar counts completed tasks by day and subject, excluding deleted and duplicate tasks", () => {
   const { subjectMonth, shiftMonth } = load("src/lib/subject-counts.ts");
   const task = { ...base, subjectId: "go" };

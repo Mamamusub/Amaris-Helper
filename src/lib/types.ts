@@ -35,6 +35,7 @@ export type Task = {
   recurrenceWasHandled?: boolean;
   focusSessions?: FocusRecord[];
   recurrence?: "go-kus-thursday";
+  goKusDescriptionVersion?: 1;
   id: string;
   title: string;
   color?: string;
