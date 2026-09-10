@@ -118,6 +118,16 @@ test("missing key, API errors, refusals and incomplete responses cannot masquera
     await assert.rejects(getAIProvider().generate({ systemPrompt: "test", message: "request" }));
   }
 });
+test("exhausted API credit produces an actionable quota error without exposing upstream details", async () => {
+  fetchMock = async () => Response.json({ error: { code: "credit_balance_exhausted", type: "insufficient_quota", message: "private upstream details" } }, { status: 429 });
+  await assert.rejects(getAIProvider().generate({ systemPrompt: "test", message: "request" }), (error) => {
+    assert.equal(error.status, 429);
+    assert.match(error.message, /Billing/);
+    assert.doesNotMatch(error.message, /private upstream details|ไม่พบ API key/);
+    return true;
+  });
+});
+
 test("request validation rejects oversized text, remote image URLs and false image signatures", async () => {
   const make = (body) => new Request("http://localhost:3000", { method: "POST", body: JSON.stringify(body) });
   for (const body of [{ request: "" }, { request: "x".repeat(4001) }, { request: "x", images: [{ dataUrl: "https://evil.example/image" }] }, { request: "x", images: [{ dataUrl: "data:image/png;base64,aGVsbG8=" }] }]) await assert.rejects(readPipelineRequest(make(body)));

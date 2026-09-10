@@ -36,6 +36,12 @@ export function getAIProvider(): AIProvider {
         throw new AIError("เชื่อมต่อ OpenAI ไม่สำเร็จหรือใช้เวลานานเกินไป กรุณาลองอีกครั้ง", 504);
       }
       if (!response.ok) {
+        if (response.status === 429) {
+          const details = await response.json().catch(() => null) as { error?: { code?: string; type?: string } } | null;
+          if (details?.error?.code === "credit_balance_exhausted" || details?.error?.code === "insufficient_quota" || details?.error?.type === "insufficient_quota") {
+            throw new AIError("เครดิตหรือโควตา OpenAI API ไม่เพียงพอ ตรวจ Billing และวงเงินของโปรเจกต์ที่ออก API key แล้วลองใหม่", 429);
+          }
+        }
         const messages: Record<number, string> = { 401: "OpenAI API key ไม่ถูกต้อง ตรวจค่าใน .env.local", 403: "บัญชี OpenAI ไม่มีสิทธิ์ใช้โมเดลนี้", 404: "ไม่พบโมเดล OpenAI ที่ตั้งไว้ ตรวจ OPENAI_MODEL", 429: "OpenAI จำกัดการใช้งานหรือเครดิต API ไม่พอ ตรวจ Billing/Usage แล้วลองใหม่", 400: "OpenAI ไม่รับคำขอนี้ ตรวจว่าโมเดลรองรับภาพและ Structured Outputs" };
         throw new AIError(messages[response.status] || "OpenAI ขัดข้องชั่วคราว กรุณาลองใหม่", response.status);
       }
