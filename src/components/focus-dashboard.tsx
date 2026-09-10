@@ -40,7 +40,7 @@ export default function FocusDashboard({ tasks, subjects, session, loading = fal
   const range = period === "custom" ? custom : focusRange(period, today);
   const rows = useMemo(() => focusHistory(tasks, subjects), [tasks, subjects]);
   const { from, to } = range;
-  const summary = useMemo(() => summarizeFocus(rows, { from, to }), [rows, from, to]);
+  const summary = useMemo(() => summarizeFocus(rows, { from, to }, subjects), [rows, subjects, from, to]);
   const undated = rows.filter((row) => !row.day);
   const activeTask = tasks.find((task) => task.id === session?.taskId);
   const recorded = session && rows.some((row) => row.record.id === session.id);

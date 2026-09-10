@@ -39,11 +39,13 @@ export function focusHistory(tasks: Task[], subjects: Subject[], zone = calendar
     return [{ record, task, title: record.snapshot?.taskTitle ?? task.title, day: validStamp(record.startedAt) ? historyDay(record.startedAt, zone) : null, subjectId: subjectId ?? "__unassigned", subjectName: subjectId ? (record.snapshot?.subjectName ?? subject?.name ?? "วิชาที่ไม่มีข้อมูลชื่อ") : "ไม่ระบุวิชา", color: record.snapshot ? record.snapshot.subjectColor : subject?.color, pausedMs }];
   })).sort((a, b) => (b.record.startedAt || 0) - (a.record.startedAt || 0));
 }
-export function summarizeFocus(rows: HistoryRow[], range: FocusRange) {
+export function summarizeFocus(rows: HistoryRow[], range: FocusRange, subjects: Subject[] = []) {
   const selected = validRange(range) ? rows.filter((row) => row.day && row.day >= range.from && row.day <= range.to) : [];
+  const subjectMap = new Map(subjects.map((subject) => [subject.id, subject]));
   const groups = new Map<string, { id: string; name: string; color?: string; elapsedMs: number; rows: HistoryRow[] }>();
   for (const row of selected) {
-    const group = groups.get(row.subjectId) ?? { id: row.subjectId, name: row.subjectName, color: row.color, elapsedMs: 0, rows: [] };
+    const currentSubject = subjectMap.get(row.subjectId);
+    const group = groups.get(row.subjectId) ?? { id: row.subjectId, name: currentSubject?.name ?? row.subjectName, color: currentSubject?.color ?? row.color, elapsedMs: 0, rows: [] };
     group.elapsedMs += row.record.elapsedMs; group.rows.push(row); groups.set(row.subjectId, group);
   }
   return { elapsedMs: selected.reduce((sum, row) => sum + row.record.elapsedMs, 0), count: selected.length, subjectCount: [...groups.keys()].filter((id) => id !== "__unassigned").length, groups: [...groups.values()].sort((a, b) => b.elapsedMs - a.elapsedMs || a.name.localeCompare(b.name, "th")) };

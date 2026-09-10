@@ -136,6 +136,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .account-bar .text-button, .sync-bar .text-button, .subject-notes .text-button { color: var(--olive); margin: 0; }
 .sync-bar > div { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; width: 100%; }
 .subject-notes { margin: 12px 0 24px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
+.subject-notes-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.subject-notes-heading h4 { margin:0; }
+.subject-delete { margin-left:auto; border:0; background:transparent; color:#a45435; font-size:12px; padding:4px 0; }
+.subject-delete:hover { color:#7f3823; text-decoration:underline; }
 .subject-notes textarea { width: 100%; min-height: 120px; padding: 12px; font: inherit; border: 1px solid var(--line); border-radius: 8px; }
 
 .task-row { border-left: 3px solid transparent; padding-left: 8px; }

@@ -10,12 +10,13 @@ export const TaskContext = createContext<{
   focus: (id: string) => void;
   subjects: Subject[];
   addSubject: (subject: Subject) => boolean;
+  deleteSubject: (id: string) => boolean;
   update: (id: string, patch: Partial<Task>) => void;
   remove: (id: string) => void;
   edit: (task: Task) => void;
   create: (subjectId?: string, deadline?: string, focused?: boolean) => void;
   openSubject: (id: string) => void;
-}>({ focus() {}, subjects: [], addSubject: () => false, update() {}, remove() {}, edit() {}, create() {}, openSubject() {} });
+}>({ focus() {}, subjects: [], addSubject: () => false, deleteSubject: () => false, update() {}, remove() {}, edit() {}, create() {}, openSubject() {} });
 
 export function TaskControls({ task }: { task: Task }) {
   const actions = useContext(TaskContext);
