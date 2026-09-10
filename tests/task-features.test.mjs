@@ -35,6 +35,19 @@ test("weekly multiple weekdays, daily rollover, inclusive end and timezone/DST b
   assert.equal(recurrenceToday(rule("daily", "2026-01-01", { timeZone: "America/New_York" }), new Date("2026-03-08T07:01:00Z")), "2026-03-08");
 });
 const base = { id: "one", title: "Task", description: "Keep history", deadline: "2026-09-10", occurrenceDate: "2026-09-10", status: "Done", repeat: rule("daily", "2026-09-10"), subtasks: [{ id: "s", title: "Step", done: true }], sourceEventId: "google", focusSessions: [{ id: "old" }] };
+
+test("monthly task counts group dated Go lessons and count completed tasks once", () => {
+  const { monthlyTaskCounts } = load("src/lib/task-counts.ts");
+  const lesson = { ...base, title: "📚 (2026/9/10) สอนโกะ kus", recurrence: "go-kus-thursday" };
+  const tasks = [lesson, lesson, { ...lesson, id: "two", deadline: "2026-09-17", status: "Planned" },
+    { ...lesson, id: "deleted", deletedAt: "yes" }, { ...lesson, id: "next", deadline: "2026-10-01" },
+    { ...lesson, id: "undated", deadline: "" }, { ...lesson, id: "manual", recurrence: undefined, title: "📚 (2026/9/24) สอนโกะ kus", deadline: "2026-09-24" }];
+  const [row] = monthlyTaskCounts(tasks, "2026-09");
+  assert.equal(row.title, "สอนโกะ kus"); assert.equal(row.total, 3); assert.equal(row.completed, 2); assert.equal(row.pending, 1);
+  assert.equal(monthlyTaskCounts(tasks, "2026-10")[0].total, 1);
+  assert.equal(monthlyTaskCounts(tasks, "").length, 0);
+  assert.equal(monthlyTaskCounts(tasks.map((task) => ({ ...task, status: "Planned" })), "2026-09")[0].completed, 0);
+});
 test("completion creates exactly one stable round, resets checklist and Calendar binding, preserves history", () => {
   const now = new Date("2026-09-10T00:00:00Z");
   const result = advanceRecurring([base], now);
