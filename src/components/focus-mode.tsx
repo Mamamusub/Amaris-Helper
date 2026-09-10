@@ -1,20 +1,26 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { Task } from "@/lib/types";
+import { snapshotFocus } from "@/lib/focus-history";
+import type { Subject, Task } from "@/lib/types";
 import { elapsed, finish, formatTime, focusedToday, pause, type FocusSession } from "@/lib/focus-timer";
 import { dayKey } from "@/lib/calendar";
 import { Subtasks } from "./task-extras";
 import { dialogKeyboard } from "./dialog-keyboard";
 
-export default function FocusMode({ taskId, tasks, accountKey, open, close, save }: { taskId: string | null; tasks: Task[]; accountKey: string; open: (id: string) => void; close: () => void; save: (id: string, patch: Partial<Task>) => boolean }) {
+export default function FocusMode({ taskId, tasks, subjects = [], accountKey, open, close, save, onSessionChange }: { taskId: string | null; tasks: Task[]; subjects?: Subject[]; onSessionChange?: (session: FocusSession | null) => void; accountKey: string; open: (id: string) => void; close: () => void; save: (id: string, patch: Partial<Task>) => boolean }) {
   const key = `${accountKey}.focus-session`;
   const read = (): FocusSession | null => { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; };
   const [session, setSession] = useState<FocusSession | null>(() => { try { return read(); } catch { return null; } });
+  const publishedSession = useRef("");
+  useEffect(() => {
+    const serialized = JSON.stringify(session);
+    if (serialized !== publishedSession.current) { publishedSession.current = serialized; onSessionChange?.(session); }
+  }, [session, onSessionChange]);
   const [now, setNow] = useState(() => Date.now());
   const [minutes, setMinutes] = useState(25);
   const [error, setError] = useState("");
-  const latest = useRef({ tasks, save });
-  useEffect(() => { latest.current = { tasks, save }; }, [tasks, save]);
+  const latest = useRef({ tasks, subjects, save });
+  useEffect(() => { latest.current = { tasks, subjects, save }; }, [tasks, subjects, save]);
   async function mutate(change: (current: FocusSession | null) => FocusSession | null) {
     try {
       if (!navigator.locks) throw new Error("เบราว์เซอร์นี้ไม่รองรับการล็อกหลายแท็บ กรุณาใช้ Chrome, Edge หรือ Safari รุ่นใหม่");
@@ -40,7 +46,7 @@ export default function FocusMode({ taskId, tasks, accountKey, open, close, save
     if (!session?.endedAt) return;
     const task = latest.current.tasks.find((item) => item.id === session.taskId);
     if (!task || task.focusSessions?.some((item) => item.id === session.id)) return;
-    if (!latest.current.save(task.id, { focusSessions: [...(task.focusSessions ?? []), { id: session.id, startedAt: session.startedAt, endedAt: session.endedAt, elapsedMs: session.elapsedMs, note: session.note, intervals: session.intervals }] })) setError("ประวัติยังบันทึกไม่ได้ เวลายังอยู่ในเครื่อง กดลองใหม่");
+    if (!latest.current.save(task.id, { focusSessions: [...(task.focusSessions ?? []), snapshotFocus(session, task, latest.current.subjects)] })) setError("ประวัติยังบันทึกไม่ได้ เวลายังอยู่ในเครื่อง กดลองใหม่");
   }, [session, tasks]);
   const task = tasks.find((item) => item.id === taskId);
   const activeTask = tasks.find((item) => item.id === session?.taskId);

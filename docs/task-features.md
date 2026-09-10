@@ -1,5 +1,18 @@
 # Tasks, recurring rounds and Focus
 
+## Focus history tab
+
+Focus is available between Tasks and Calendar. It reads the existing saved `Task.focusSessions` collection, including tombstoned tasks, without starting another timer or writing records when browsing history.
+
+- Defaults to the current Monday–Sunday week. Today, month and validated custom date ranges use the existing `Asia/Bangkok` workspace timezone.
+- All dashboard totals, subject percentages and daily groups attribute the entire round to its start date. This dashboard rule intentionally differs from the timer panel's existing midnight-split today counter, which is unchanged.
+- Each subject expands independently. History is newest first, with 20 entries initially and a Load more button. Task titles open the existing editor; deleted tasks have no link.
+- New completed records capture task title, subject ID/name/color, target duration, actual paused time and completion outcome. Older records fall back to the task's currently available metadata and never receive a retroactive snapshot.
+- Missing start dates are shown separately and excluded from date-filtered totals. Missing time, pause and outcome data is explicitly labelled. Recorded milliseconds are summed before formatting; zero-time records do not contribute.
+- Active or awaiting-save sessions are displayed separately and do not contribute until recorded. The status comes from the existing Focus Mode state.
+
+Automated tests cover Monday and month boundaries, midnight attribution, duplicate IDs, legacy metadata, historical snapshots, deleted tasks, accurate totals, navigation, multiple expanded subjects, pagination and opening task details. These component tests do not verify actual browser layout.
+
 ## Try the features
 
 1. Open Tasks and create a task, or choose Edit on an existing task.

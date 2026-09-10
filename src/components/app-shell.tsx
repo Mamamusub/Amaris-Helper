@@ -19,15 +19,17 @@ import AccountBoundary, { useCloud, useCloudSnapshot } from "@/components/accoun
 import SubjectNotes from "@/components/subject-notes";
 
 import { dialogKeyboard } from "./dialog-keyboard";
+import FocusDashboard from "./focus-dashboard";
+import type { FocusSession } from "@/lib/focus-timer";
 import FocusMode from "./focus-mode";
 import { advanceRecurring, editRecurring, nextForTask, recurrenceToday } from "@/lib/task-recurrence";
 import FocusAssignments from "@/components/focus-assignments";
 
 import RecurringTasks, { GoLessonButton } from "@/components/recurring-tasks";
 
-type View = "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "career" | "development" | "port" | "settings";
+type View = "focus" | "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "career" | "development" | "port" | "settings";
 const navItems: { id: View; label: string; icon: string }[] = [
-  { id: "dashboard", label: "Today", icon: "⌂" }, { id: "teams", label: "Team grid", icon: "◈" }, { id: "pipeline", label: "Pipeline", icon: "⌁" }, { id: "tasks", label: "Tasks", icon: "✓" }, { id: "calendar", label: "Calendar", icon: "▦" }, { id: "study", label: "Study", icon: "✦" }, { id: "career", label: "Career", icon: "↗" }, { id: "development", label: "Build lab", icon: "⌘" }, { id: "port", label: "Investment", icon: "⇄" },
+  { id: "dashboard", label: "Today", icon: "⌂" }, { id: "teams", label: "Team grid", icon: "◈" }, { id: "pipeline", label: "Pipeline", icon: "⌁" }, { id: "tasks", label: "Tasks", icon: "✓" }, { id: "focus", label: "Focus", icon: "◷" }, { id: "calendar", label: "Calendar", icon: "▦" }, { id: "study", label: "Study", icon: "✦" }, { id: "career", label: "Career", icon: "↗" }, { id: "development", label: "Build lab", icon: "⌘" }, { id: "port", label: "Investment", icon: "⇄" },
 ];
 
 const teamOrder: Team[] = ["Orchestrator", "Shared", "Career", "Development"];
@@ -53,6 +55,7 @@ function LoadedAppShell() {
   }, [cloud]);
   const storedTasks = synced?.data.tasks ?? localTasks;
   const tasks = liveTasks(storedTasks);
+  const [activeFocus, setActiveFocus] = useState<FocusSession | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editorVersion, setEditorVersion] = useState(0);
@@ -141,6 +144,7 @@ function LoadedAppShell() {
       {view === "dashboard" && <Dashboard calendarId={calendarId} allTasks={storedTasks} onCreateTask={addTask} onViewTasks={() => setView("tasks")} tasks={tasks} runs={runs} onRoute={routeRequest} onOpenAgent={openAgent} />}
       {view === "teams" && <TeamGrid onOpenAgent={openAgent} />}
       {view === "pipeline" && <PipelineView runs={runs} onRoute={routeRequest} onSaveResponse={saveResponse} storageError={storageError} onCreateTask={addTask} />}
+      {view === "focus" && <FocusDashboard tasks={storedTasks} subjects={subjects} session={activeFocus} loading={synced?.status === "กำลังโหลด" && !storedTasks.length} error={synced?.error || saveError} retry={() => { if (cloud) void cloud.sync(true); else { setTasks(readStorage(storageKeys.tasks, localTasks)); setSaveError(""); } }} chooseTasks={() => setView("tasks")} />}
       {view === "tasks" && <TaskTimelineView tasks={tasks} />}
       {view === "study" && <StudyAssignmentsView subjects={subjects} setSubjects={commitSubjects} tasks={tasks} onOpenAgent={openAgent} selectedSubjectId={subjectId} />}
       {view === "career" && <TeamView team="Career" onOpenAgent={openAgent} />}
@@ -157,7 +161,7 @@ function LoadedAppShell() {
         setUndoIds((ids) => [...ids, ...deleted]);
         setEditor(null);
       } }} />}
-    <FocusMode taskId={focusId} tasks={storedTasks} accountKey={cloud?.key ?? "agent-helper"} open={setFocusId} close={() => setFocusId(null)} save={update} />
+    <FocusMode taskId={focusId} tasks={storedTasks} subjects={subjects} onSessionChange={setActiveFocus} accountKey={cloud?.key ?? "agent-helper"} open={setFocusId} close={() => setFocusId(null)} save={update} />
 
     {deleteId && <div className="workspace-overlay" role="dialog" aria-modal="true" aria-label="ลบงานซ้ำ" onKeyDown={(event) => dialogKeyboard(event, () => setDeleteId(null))}><section className="panel task-editor"><h3>ลบงานซ้ำ</h3><p>รอบก่อนหน้ายังคงอยู่ในประวัติ</p>{(["this", "future"] as const).map((scope) => <button className="secondary-button" key={scope} onClick={() => { const selected = storedTasks.find((task) => task.id === deleteId)!; const ids = storedTasks.filter((task) => task.id === deleteId || (scope === "future" && (task.seriesId || task.id) === (selected.seriesId || selected.id) && (task.occurrenceDate || task.deadline) > (selected.occurrenceDate || selected.deadline))).map((task) => task.id); if (commitTasks(storedTasks.map((task) => ids.includes(task.id) ? { ...task, deletedAt: new Date().toISOString(), deletionBatch: deleteId, recurrenceWasHandled: task.recurrenceHandled, recurrenceHandled: scope === "future" ? true : task.recurrenceHandled } : task))) { setUndoIds((old) => [...old, ...ids]); setDeleteId(null); } }}>{scope === "this" ? "เฉพาะรอบนี้" : "รอบนี้และรอบถัดไป"}</button>)}<button className="secondary-button" autoFocus onClick={() => setDeleteId(null)}>ยกเลิก</button></section></div>}
   </div></TaskContext.Provider>;

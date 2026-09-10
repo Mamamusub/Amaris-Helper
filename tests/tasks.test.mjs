@@ -15,6 +15,7 @@ function harness() {
   let position = "", slot = 0;
   let visited = new Set();
   const react = {
+    useMemo(calculate) { return calculate(); },
     useState(initial) {
       const key = `${position}:${slot++}`; visited.add(key);
       if (!hooks.has(key)) hooks.set(key, typeof initial === "function" ? initial() : initial);
@@ -234,4 +235,31 @@ test("recurrence completion through shared controls is persisted once and series
   assert.equal(read().filter((task) => task.deletedAt).length, 1);
   h.click("Undo"); assert.equal(read().filter((task) => task.deletedAt).length, 0);
   assert.equal(read().find((task) => task.id !== "series").recurrenceHandled, false);
+});
+
+test("Focus navigation defaults to week, expands multiple subjects, paginates and opens the original task", () => {
+  const h = harness(); const { dayKey } = h.load("src/lib/calendar.ts"); const day = dayKey(new Date());
+  const startedAt = Date.parse(`${day}T02:00:00Z`);
+  const records = Array.from({ length: 22 }, (_, index) => ({ id: `session-${index}`, startedAt: startedAt + index * 60000, endedAt: startedAt + index * 60000 + 30000, elapsedMs: 30000, note: "" }));
+  const task = { id: "history-task", title: "Original focus task", description: "", deadline: day, status: "Planned", priority: "Medium", team: "Study", assignedAgent: "researcher", subjectId: "math", focusSessions: records };
+  h.storage.set("agent-helper.tasks", JSON.stringify([task, { ...task, id: "deleted-history", title: "Deleted task history", deletedAt: "yes", subjectId: undefined, focusSessions: [{ ...records[0], id: "deleted-session" }] }]));
+  h.storage.set("agent-helper.subjects", JSON.stringify([{ id: "math", name: "Math", color: "#abc" }]));
+  h.render(); h.click("Focus");
+  assert.equal(h.findAll((n) => n.type === "select" && n.props.value === "week").length, 1);
+  const toggle = (index) => { h.findAll((n) => n.props["aria-controls"] === `focus-subject-${index}`)[0].props.onClick(); h.render(); };
+  toggle(0); toggle(1);
+  assert.equal(h.findAll((n) => n.props["aria-expanded"] === true).length, 2);
+  assert.equal(h.findAll((n) => n.type === "article" && n.props.className === "focus-history-row").length, 21);
+  h.click("โหลดเพิ่มเติม · เหลือ 2 รอบ");
+  assert.equal(h.findAll((n) => n.type === "article" && n.props.className === "focus-history-row").length, 23);
+  assert.equal(h.findAll((n) => n.type === "button" && h.text(n).includes("Deleted task history")).length, 0);
+  h.findAll((n) => n.type === "button" && n.props.className === "focus-task-link")[0].props.onClick(); h.render();
+  assert.equal(h.findAll((n) => n.type === "input" && n.props.value === task.title).length, 1);
+  assert.equal(JSON.parse(h.storage.get("agent-helper.tasks"))[0].focusSessions.length, 22, "viewing history doesn't write sessions");
+  h.findAll((n) => n.props["aria-label"] === "Close task editor")[0].props.onClick(); h.render();
+  h.field("ช่วงเวลา", "custom"); h.field("ตั้งแต่", "2099-01-01"); h.field("ถึง", "2099-01-02");
+  assert.equal(h.findAll((n) => n.type === "h3" && h.text(n) === "ไม่มีรอบโฟกัสในช่วงนี้").length, 1);
+  assert.equal(h.findAll((n) => n.props.className === "focus-subject-toggle").length, 0);
+  h.refresh(); h.click("Focus");
+  assert.equal(JSON.parse(h.storage.get("agent-helper.tasks"))[0].focusSessions.length, 22);
 });

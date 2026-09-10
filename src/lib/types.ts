@@ -15,6 +15,15 @@ export type Agent = {
   status: AgentStatus;
 };
 
+export type FocusRecord = {
+  id: string; startedAt: number; endedAt: number; elapsedMs: number; note: string;
+  intervals?: { start: number; end: number }[];
+  snapshot?: { taskTitle: string; subjectId: string | null; subjectName: string | null; subjectColor?: string };
+  durationMs?: number;
+  pausedMs?: number;
+  outcome?: "completed" | "ended-early";
+};
+
 export type Task = {
   repeat?: { frequency: "daily" | "weekly" | "monthly"; weekdays: number[]; anchor: string; until?: string; timeZone: string };
   seriesId?: string;
@@ -24,7 +33,7 @@ export type Task = {
   nextTemplate?: Pick<Task, "title" | "description" | "subtasks" | "repeat" | "color" | "priority" | "subjectId" | "team" | "assignedAgent">;
   deletionBatch?: string;
   recurrenceWasHandled?: boolean;
-  focusSessions?: { id: string; startedAt: number; endedAt: number; elapsedMs: number; note: string; intervals?: { start: number; end: number }[] }[];
+  focusSessions?: FocusRecord[];
   recurrence?: "go-kus-thursday";
   id: string;
   title: string;

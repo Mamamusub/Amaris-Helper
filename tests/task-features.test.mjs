@@ -95,3 +95,46 @@ test("editing scopes preserve completed history, occurrence-only templates and r
   assert.ok(stopped.find((task) => task.id !== base.id).deletedAt);
   assert.equal(stopped.find((task) => task.id === base.id).deletedAt, undefined);
 });
+
+const { focusHistory, summarizeFocus, focusRange, snapshotFocus, focusDuration, sessionClock, validRange } = load("src/lib/focus-history.ts");
+const historyRecord = (id, start = "2026-09-10T02:00:00Z", extra = {}) => ({ id, startedAt: Date.parse(start), endedAt: Date.parse(start) + 1800000, elapsedMs: 1500000, note: "", ...extra });
+test("Focus ranges start on Monday and handle month/year boundaries and invalid custom dates", () => {
+  assert.equal(focusRange("week", "2026-09-13").from, "2026-09-07");
+  assert.equal(focusRange("week", "2026-09-14").to, "2026-09-20");
+  assert.equal(focusRange("week", "2027-01-01").from, "2026-12-28");
+  assert.equal(focusRange("month", "2028-02-04").to, "2028-02-29");
+  assert.equal(validRange({ from: "2026-02-30", to: "2026-03-01" }), false);
+  assert.equal(validRange({ from: "2026-09-11", to: "2026-09-10" }), false);
+});
+test("Focus summary uses start day for the entire crossing-midnight round, deduplicates and retains deleted history", () => {
+  const record = historyRecord("night", "2026-09-10T16:50:00Z");
+  const rows = focusHistory([{ ...base, deletedAt: "yes", subjectId: "math", focusSessions: [record, record] }, { ...base, id: "copy", focusSessions: [record] }], [{ id: "math", name: "Math", color: "#abc" }]);
+  assert.equal(rows.length, 1); assert.equal(rows[0].day, "2026-09-10");
+  assert.equal(summarizeFocus(rows, { from: "2026-09-10", to: "2026-09-10" }).elapsedMs, 1500000);
+  assert.equal(summarizeFocus(rows, { from: "2026-09-11", to: "2026-09-11" }).count, 0);
+  assert.ok(sessionClock(record).includes("2026-09-11"));
+  assert.equal(rows[0].task.deletedAt, "yes");
+});
+test("historical snapshots survive renames, reassignment and subject deletion, with explicit unassigned snapshot", () => {
+  const session = { id: "saved", startedAt: 1000, endedAt: 1801000, elapsedMs: 1500000, durationMs: 1500000, note: "", taskId: "one" };
+  const saved = snapshotFocus(session, { ...base, subjectId: "math" }, [{ id: "math", name: "Original math", color: "#abc" }]);
+  const rows = focusHistory([{ ...base, title: "Changed", subjectId: "physics", focusSessions: [saved] }], []);
+  assert.equal(rows[0].title, "Task"); assert.equal(rows[0].subjectName, "Original math"); assert.equal(rows[0].subjectId, "math");
+  assert.equal(rows[0].pausedMs, 300000); assert.equal(rows[0].record.outcome, "completed");
+  const noSubject = snapshotFocus({ ...session, id: "none", elapsedMs: 20000 }, { ...base, subjectId: undefined }, []);
+  const unassigned = focusHistory([{ ...base, subjectId: "physics", focusSessions: [noSubject] }], []);
+  assert.equal(unassigned[0].subjectName, "ไม่ระบุวิชา"); assert.equal(noSubject.outcome, "ended-early");
+});
+test("legacy missing metadata stays unknown, only actual intervals establish pauses, totals sum milliseconds", () => {
+  const records = [historyRecord("a", undefined, { elapsedMs: 31000 }), historyRecord("b", undefined, { elapsedMs: 31000 }), historyRecord("unknown", undefined, { startedAt: undefined, endedAt: undefined })];
+  const rows = focusHistory([{ ...base, focusSessions: records }], []);
+  assert.equal(rows.find((row) => row.record.id === "a").pausedMs, null);
+  assert.equal(sessionClock(records[2]), "ไม่มีข้อมูลเวลาเริ่ม–สิ้นสุด");
+  assert.equal(rows.find((row) => row.record.id === "unknown").day, null);
+  const total = summarizeFocus(rows, { from: "2026-09-10", to: "2026-09-10" });
+  assert.equal(total.elapsedMs, 62000); assert.equal(focusDuration(total.elapsedMs), "1 นาที");
+  assert.equal(total.subjectCount, 0); assert.equal(total.count, 2);
+  assert.equal(focusDuration(8100000), "2 ชม. 15 นาที");
+  const withIntervals = historyRecord("spans", undefined, { intervals: [{ start: records[0].startedAt, end: records[0].startedAt + 1500000 }] });
+  assert.equal(focusHistory([{ ...base, focusSessions: [withIntervals] }], [])[0].pausedMs, 300000);
+});
