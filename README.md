@@ -53,7 +53,7 @@ Agents are data in the registry, not definitions scattered across components. Ad
 
 ### How routing works
 
-Pipeline prepares a local prompt describing Panda and the specialist roles. The user copies it into ChatGPT, then pastes the answer back into the workspace. Individual agent workspaces can answer through `/api/agent/chat` when `AI_PROVIDER=openai` and `OPENAI_API_KEY` are configured server-side.
+The Live Pipeline sends a command to the selected Team Grid agent through `/api/pipeline/run`. The server reads the API key from `AI_PROVIDER=openai` and `OPENAI_API_KEY` in `.env.local`; the key is never sent from the browser. Older saved runs may still contain the manual copy/paste prompt format. Individual agent workspaces use the same server-side provider through `/api/agent/chat`.
 
 ### Add a subject
 
@@ -61,7 +61,7 @@ Use Study > Add subject. The subject is persisted locally and opens as its own s
 
 ## Environment
 
-Copy `.env.example` to `.env.local` when you want a local configuration file. Do not commit `.env.local` or API keys. To enable real replies in individual agent workspaces, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL` in `.env.local`, then restart the dev server. The shared Pipeline remains manual copy/paste.
+Copy `.env.example` to `.env.local` when you want a local configuration file. Do not commit `.env.local` or API keys. To enable real replies in the Pipeline and individual agent workspaces, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL` in `.env.local`, then restart the dev server.
 
 For the Port page, set `GOOGLE_SHEET_URL` to the Google Sheet URL (or use `GOOGLE_SHEET_ID`) and optionally set `GOOGLE_SHEET_RANGE=PORT!A1:I100`. The Port page then loads that sheet without requiring the URL each time. Reconnect Google after enabling the Sheets API so the read-only Sheets permission is granted.
 
