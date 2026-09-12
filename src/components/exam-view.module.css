@@ -50,9 +50,9 @@
   display: -webkit-box;
   width: 100%;
   margin-top: 6px;
-  padding: 6px 7px;
+  padding: 6px 8px;
 
-  border: 0;
+  border: none;
   border-left: 3px solid;
   border-radius: 6px;
 
@@ -63,19 +63,14 @@
   line-height: 1.35;
   text-align: left;
 
-  cursor: pointer;
-
   white-space: normal;
-
   overflow: hidden;
-  text-overflow: ellipsis;
 
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 
-  word-break: break-word;
+  cursor: pointer;
 }
-
 .upcomingList {
   display: flex;
   flex-direction: column;

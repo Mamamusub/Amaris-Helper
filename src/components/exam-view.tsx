@@ -560,36 +560,16 @@ export default function ExamView({ subjects }: Props) {
                     <span>{day}</span>
 
                     {examsToday.map((subject) => (
-                      <button
+                    <button
                         key={subject.id}
-                        onClick={() =>
-                          setSelectedSubjectId(
-                            subject.id
-                          )
-                        }
-                        className={
-                          styles.calendarExam
-                        }
+                        onClick={() => setSelectedSubjectId(subject.id)}
+                        className={styles.calendarExam}
                         style={{
-                          borderLeftColor:
-                            subject.color,
+                        borderLeftColor: subject.color,
                         }}
-                      >
-                        {examsToday.map((subject) => (
-                        <button
-                            key={subject.id}
-                            onClick={() =>
-                            setSelectedSubjectId(subject.id)
-                            }
-                            className={styles.calendarExam}
-                            style={{
-                            borderLeftColor: subject.color,
-                            }}
-                        >
-                            {examInfo[subject.id]?.calendarName?.trim() || subject.name}
-                        </button>
-                        ))}
-                      </button>
+                    >
+                        {examInfo[subject.id]?.calendarName?.trim() || subject.name}
+                    </button>
                     ))}
                   </div>
                 );
