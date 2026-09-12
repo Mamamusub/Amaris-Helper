@@ -1,6 +1,6 @@
 .topGrid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 2.5fr) minmax(280px, 0.8fr);
   gap: 18px;
   margin-bottom: 22px;
 }
@@ -34,10 +34,11 @@
 
 .calendarDay,
 .emptyCalendarDay {
-  min-height: 84px;
-  padding: 7px;
+  min-height: 125px;
+  padding: 8px;
   border-right: 1px solid rgba(30, 35, 25, 0.09);
   border-bottom: 1px solid rgba(30, 35, 25, 0.09);
+  overflow: hidden;
 }
 
 .calendarDay > span {
@@ -46,21 +47,33 @@
 }
 
 .calendarExam {
-  display: block;
+  display: -webkit-box;
   width: 100%;
-  margin-top: 5px;
-  padding: 4px 5px;
-  overflow: hidden;
+  margin-top: 6px;
+  padding: 6px 7px;
+
   border: 0;
   border-left: 3px solid;
-  border-radius: 5px;
+  border-radius: 6px;
+
   background: #f1f3e9;
   color: #303326;
-  font-size: 9px;
+
+  font-size: 10px;
+  line-height: 1.35;
   text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+
   cursor: pointer;
+
+  white-space: normal;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+
+  word-break: break-word;
 }
 
 .upcomingList {
