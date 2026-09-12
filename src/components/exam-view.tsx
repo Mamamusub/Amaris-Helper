@@ -173,27 +173,72 @@ export default function ExamView({ subjects }: Props) {
   const [currentMonth, setCurrentMonth] =
     useState(() => new Date());
 
-  useEffect(() => {
-    const storedExam = localStorage.getItem(EXAM_KEY);
-    const storedChecklist =
-      localStorage.getItem(CHECKLIST_KEY);
+useEffect(() => {
+  const storedExam = localStorage.getItem(EXAM_KEY);
+  const storedChecklist =
+    localStorage.getItem(CHECKLIST_KEY);
 
-    if (storedExam) {
-      try {
-        setExamInfo(JSON.parse(storedExam));
-      } catch {}
+  if (storedExam) {
+    try {
+      const parsed = JSON.parse(storedExam);
+
+      const migrated: ExamMap = Object.fromEntries(
+        Object.entries(parsed).map(([subjectId, value]) => {
+          if (Array.isArray(value)) {
+            return [subjectId, value];
+          }
+
+          const oldExam = value as {
+            date?: string;
+            time?: string;
+            room?: string;
+            type?: string;
+            calendarName?: string;
+          };
+
+          const examType: ExamInfo["type"] =
+            oldExam.type === "Quiz" ||
+            oldExam.type === "Final" ||
+            oldExam.type === "Midterm"
+              ? oldExam.type
+              : "Midterm";
+
+          return [
+            subjectId,
+            [
+              {
+                id: crypto.randomUUID(),
+                date: oldExam.date ?? "",
+                time: oldExam.time ?? "",
+                room: oldExam.room ?? "",
+                type: examType,
+                calendarName: oldExam.calendarName ?? "",
+              },
+            ],
+          ];
+        })
+      );
+
+      setExamInfo(migrated);
+      localStorage.setItem(
+        EXAM_KEY,
+        JSON.stringify(migrated)
+      );
+    } catch (error) {
+      console.error(error);
     }
+  }
 
-    if (storedChecklist) {
-      try {
-        setChecklists(JSON.parse(storedChecklist));
-      } catch {}
-    }
+  if (storedChecklist) {
+    try {
+      setChecklists(JSON.parse(storedChecklist));
+    } catch {}
+  }
 
-    getStoredFiles()
-      .then(setFiles)
-      .catch(console.error);
-  }, []);
+  getStoredFiles()
+    .then(setFiles)
+    .catch(console.error);
+}, []);
 
   useEffect(() => {
     if (!selectedSubjectId && subjects.length) {
