@@ -90,6 +90,31 @@
   cursor: pointer;
 }
 
+.examList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.examEntry {
+  padding: 16px;
+  border: 1px solid #e1e3d9;
+  border-radius: 12px;
+  background: #fafbf7;
+}
+
+.examEntryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.examEntryHeader strong {
+  font-size: 13px;
+  color: #303326;
+}
+
 .upcomingExam > div {
   display: flex;
   flex: 1;

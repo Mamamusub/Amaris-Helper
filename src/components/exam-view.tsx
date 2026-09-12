@@ -9,14 +9,15 @@ type Props = {
 };
 
 type ExamInfo = {
+  id: string;
   date: string;
   time: string;
   room: string;
-  type: string;
+  type: "Quiz" | "Midterm" | "Final";
   calendarName: string;
 };
 
-type ExamMap = Record<string, ExamInfo>;
+type ExamMap = Record<string, ExamInfo[]>;
 
 type ChecklistItem = {
   id: string;
@@ -219,48 +220,77 @@ export default function ExamView({ subjects }: Props) {
       (subject) => subject.id === selectedSubjectId
     ) ?? subjects[0];
 
-  const upcomingExams = useMemo(() => {
+    const upcomingExams = useMemo(() => {
     return subjects
-      .filter((subject) => {
-        const date = examInfo[subject.id]?.date;
+        .flatMap((subject) =>
+        (examInfo[subject.id] ?? []).map((exam) => ({
+            subject,
+            exam,
+        }))
+        )
+        .filter(({ exam }) => {
+        if (!exam.date) return false;
 
-        if (!date) return false;
-
-        const remaining = daysUntil(date);
+        const remaining = daysUntil(exam.date);
 
         return remaining !== null && remaining >= 0;
-      })
-      .sort((a, b) => {
-        return (
-          examInfo[a.id].date.localeCompare(
-            examInfo[b.id].date
-          )
+        })
+        .sort((a, b) =>
+        a.exam.date.localeCompare(b.exam.date)
         );
-      });
-  }, [subjects, examInfo]);
+    }, [subjects, examInfo]);
 
-  function updateExam(
-    subjectId: string,
-    field: keyof ExamInfo,
-    value: string
-  ) {
-    const current = examInfo[subjectId] ?? {
-      date: "",
-      time: "",
-      room: "",
-      type: "Midterm",
-      calendarName: "",
-    };
+function addExam(subjectId: string) {
+  const newExam: ExamInfo = {
+    id: crypto.randomUUID(),
+    date: "",
+    time: "",
+    room: "",
+    type: "Quiz",
+    calendarName: "",
+  };
 
-    saveExamInfo({
-      ...examInfo,
-      [subjectId]: {
-        ...current,
-        [field]: value,
-      },
-    });
-  }
+  saveExamInfo({
+    ...examInfo,
+    [subjectId]: [
+      ...(examInfo[subjectId] ?? []),
+      newExam,
+    ],
+  });
+}
 
+function updateExam(
+  subjectId: string,
+  examId: string,
+  field: keyof Omit<ExamInfo, "id">,
+  value: string
+) {
+  saveExamInfo({
+    ...examInfo,
+
+    [subjectId]: (examInfo[subjectId] ?? []).map((exam) =>
+      exam.id === examId
+        ? {
+            ...exam,
+            [field]: value,
+          }
+        : exam
+    ),
+  });
+}
+
+function deleteExam(
+  subjectId: string,
+  examId: string
+) {
+  saveExamInfo({
+    ...examInfo,
+
+    [subjectId]: (examInfo[subjectId] ?? []).filter(
+      (exam) => exam.id !== examId
+    ),
+  });
+}
   function addChecklistItem(event: FormEvent) {
     event.preventDefault();
 
@@ -543,12 +573,14 @@ export default function ExamView({ subjects }: Props) {
 
                 const key = dateKey(day);
 
-                const examsToday =
-                  subjects.filter(
-                    (subject) =>
-                      examInfo[subject.id]?.date ===
-                      key
-                  );
+                const examsToday = subjects.flatMap((subject) =>
+                    (examInfo[subject.id] ?? [])
+                        .filter((exam) => exam.date === key)
+                        .map((exam) => ({
+                        subject,
+                        exam,
+                        }))
+                    );
 
                 return (
                   <div
@@ -559,18 +591,21 @@ export default function ExamView({ subjects }: Props) {
                   >
                     <span>{day}</span>
 
-                    {examsToday.map((subject) => (
-                    <button
-                        key={subject.id}
-                        onClick={() => setSelectedSubjectId(subject.id)}
-                        className={styles.calendarExam}
-                        style={{
-                        borderLeftColor: subject.color,
-                        }}
-                    >
-                        {examInfo[subject.id]?.calendarName?.trim() || subject.name}
-                    </button>
-                    ))}
+                    {examsToday.map(({ subject, exam }) => (
+                        <button
+                            key={exam.id}
+                            onClick={() =>
+                            setSelectedSubjectId(subject.id)
+                            }
+                            className={styles.calendarExam}
+                            style={{
+                            borderLeftColor: subject.color,
+                            }}
+                        >
+                            {exam.calendarName?.trim() ||
+                            `${subject.name} · ${exam.type}`}
+                        </button>
+                        ))}
                   </div>
                 );
               }
@@ -594,53 +629,46 @@ export default function ExamView({ subjects }: Props) {
           </div>
 
           <div className={styles.upcomingList}>
-            {upcomingExams.map((subject) => {
-              const info = examInfo[subject.id];
+            {upcomingExams.map(({ subject, exam }) => {
+                const remaining = daysUntil(exam.date);
 
-              const remaining =
-                daysUntil(info.date);
+                return (
+                    <button
+                    key={exam.id}
+                    className={styles.upcomingExam}
+                    onClick={() =>
+                        setSelectedSubjectId(subject.id)
+                    }
+                    >
+                    <span
+                        className={styles.subjectDot}
+                        style={{
+                        background: subject.color,
+                        }}
+                    />
 
-              return (
-                <button
-                  key={subject.id}
-                  className={
-                    styles.upcomingExam
-                  }
-                  onClick={() =>
-                    setSelectedSubjectId(
-                      subject.id
-                    )
-                  }
-                >
-                  <span
-                    className={styles.subjectDot}
-                    style={{
-                      background:
-                        subject.color,
-                    }}
-                  />
+                    <div>
+                        <strong>
+                        {exam.calendarName?.trim() ||
+                            subject.name}
+                        </strong>
 
-                  <div>
-                    <strong>
-                      {subject.name}
-                    </strong>
+                        <small>
+                        {exam.type}
+                        {exam.time
+                            ? ` · ${exam.time}`
+                            : ""}
+                        </small>
+                    </div>
 
-                    <small>
-                      {info.type}
-                      {info.time
-                        ? ` · ${info.time}`
-                        : ""}
-                    </small>
-                  </div>
-
-                  <b>
-                    {remaining === 0
-                      ? "Today"
-                      : `${remaining}d`}
-                  </b>
-                </button>
-              );
-            })}
+                    <b>
+                        {remaining === 0
+                        ? "Today"
+                        : `${remaining}d`}
+                    </b>
+                    </button>
+                );
+                })}
 
             {!upcomingExams.length && (
               <div className="empty-state">
@@ -701,105 +729,141 @@ export default function ExamView({ subjects }: Props) {
                 <h3>
                   {selectedSubject.name}
                 </h3>
+                <button
+                    className="primary-button"
+                    onClick={() => addExam(selectedSubject.id)}
+                    >
+                    + Add exam
+                </button>
               </div>
             </div>
 
-            <div className={styles.detailGrid}>
-                <label>
-                    Exam date
-
-                    <input
-                    type="date"
-                    value={
-                        examInfo[selectedSubject.id]?.date ?? ""
-                    }
-                    onChange={(event) =>
-                        updateExam(
-                        selectedSubject.id,
-                        "date",
-                        event.target.value
-                        )
-                    }
-                    />
-                </label>
-
-                <label>
-                    Time
-
-                    <input
-                    type="time"
-                    value={
-                        examInfo[selectedSubject.id]?.time ?? ""
-                    }
-                    onChange={(event) =>
-                        updateExam(
-                        selectedSubject.id,
-                        "time",
-                        event.target.value
-                        )
-                    }
-                    />
-                </label>
-
-                <label>
-                    Type
-
-                    <select
-                    value={
-                        examInfo[selectedSubject.id]?.type ?? "Midterm"
-                    }
-                    onChange={(event) =>
-                        updateExam(
-                        selectedSubject.id,
-                        "type",
-                        event.target.value
-                        )
-                    }
+            <div className={styles.examList}>
+                {(examInfo[selectedSubject.id] ?? []).map(
+                    (exam, index) => (
+                    <div
+                        key={exam.id}
+                        className={styles.examEntry}
                     >
-                    <option>Quiz</option>
-                    <option>Midterm</option>
-                    <option>Final</option>
-                    </select>
-                </label>
+                        <div className={styles.examEntryHeader}>
+                        <strong>
+                            Exam {index + 1} · {exam.type}
+                        </strong>
 
-                <label>
-                    Room
+                        <button
+                            className={styles.deleteButton}
+                            onClick={() =>
+                            deleteExam(
+                                selectedSubject.id,
+                                exam.id
+                            )
+                            }
+                        >
+                            ×
+                        </button>
+                        </div>
 
-                    <input
-                    type="text"
-                    placeholder="e.g. LH3-303"
-                    value={
-                        examInfo[selectedSubject.id]?.room ?? ""
-                    }
-                    onChange={(event) =>
-                        updateExam(
-                        selectedSubject.id,
-                        "room",
-                        event.target.value
-                        )
-                    }
-                    />
-                </label>
+                        <div className={styles.detailGrid}>
+                        <label>
+                            Exam date
 
-                <label className={styles.calendarLabel}>
-                    Calendar label
+                            <input
+                            type="date"
+                            value={exam.date}
+                            onChange={(event) =>
+                                updateExam(
+                                selectedSubject.id,
+                                exam.id,
+                                "date",
+                                event.target.value
+                                )
+                            }
+                            />
+                        </label>
 
-                    <input
-                    type="text"
-                    placeholder="e.g. ProbStat"
-                    value={
-                        examInfo[selectedSubject.id]?.calendarName ?? ""
-                    }
-                    onChange={(event) =>
-                        updateExam(
-                        selectedSubject.id,
-                        "calendarName",
-                        event.target.value
-                        )
-                    }
-                    />
-                </label>
-                </div>
+                        <label>
+                            Time
+
+                            <input
+                            type="time"
+                            value={exam.time}
+                            onChange={(event) =>
+                                updateExam(
+                                selectedSubject.id,
+                                exam.id,
+                                "time",
+                                event.target.value
+                                )
+                            }
+                            />
+                        </label>
+
+                        <label>
+                            Type
+
+                            <select
+                            value={exam.type}
+                            onChange={(event) =>
+                                updateExam(
+                                selectedSubject.id,
+                                exam.id,
+                                "type",
+                                event.target.value
+                                )
+                            }
+                            >
+                            <option>Quiz</option>
+                            <option>Midterm</option>
+                            <option>Final</option>
+                            </select>
+                        </label>
+
+                        <label>
+                            Room
+
+                            <input
+                            type="text"
+                            placeholder="e.g. LH3-303"
+                            value={exam.room}
+                            onChange={(event) =>
+                                updateExam(
+                                selectedSubject.id,
+                                exam.id,
+                                "room",
+                                event.target.value
+                                )
+                            }
+                            />
+                        </label>
+
+                        <label className={styles.calendarLabel}>
+                            Calendar label
+
+                            <input
+                            type="text"
+                            placeholder="e.g. ProbStat Quiz"
+                            value={exam.calendarName}
+                            onChange={(event) =>
+                                updateExam(
+                                selectedSubject.id,
+                                exam.id,
+                                "calendarName",
+                                event.target.value
+                                )
+                            }
+                            />
+                        </label>
+                        </div>
+                    </div>
+                    )
+                )}
+
+  {(examInfo[selectedSubject.id] ?? []).length === 0 && (
+    <div className="empty-state">
+      No exams yet. Click + Add exam.
+    </div>
+  )}
+</div>
           </section>
 
           <div className={styles.bottomGrid}>
