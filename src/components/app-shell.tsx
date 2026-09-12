@@ -9,6 +9,7 @@ import { agents, chooseRoute, getAgent, teamMeta } from "@/lib/agents";
 import { CalendarEvent, eventDeadline, eventSubjectId, eventSubjectName } from "@/lib/calendar";
 import { demoMessages, demoSubjects, demoTasks, readStorage, storageKeys, StoredMessages, writeStorage } from "@/lib/storage";
 import { Agent, AgentRun, ChatMessage, PipelineImage, Subject, Task, Team } from "@/lib/types";
+import ExamView from "./exam-view";
 
 import { TaskContext, TaskControls, TaskEditor } from "@/components/task-controls";
 import { liveTasks, todayTasks, updateTask, migrateTasks, sortTasksByDeadline, detachSubject } from "@/lib/task-model";
@@ -28,9 +29,9 @@ import SubjectCount from "@/components/subject-count";
 
 import RecurringTasks, { GoLessonButton } from "@/components/recurring-tasks";
 
-type View = "focus" | "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "career" | "development" | "port" | "settings";
+type View = "focus" | "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "exam"| "career" | "development" | "port" | "settings";
 const navItems: { id: View; label: string; icon: string }[] = [
-  { id: "dashboard", label: "Today", icon: "⌂" }, { id: "teams", label: "Team grid", icon: "◈" }, { id: "pipeline", label: "Pipeline", icon: "⌁" }, { id: "tasks", label: "Tasks", icon: "✓" }, { id: "focus", label: "Focus", icon: "◷" }, { id: "calendar", label: "Calendar", icon: "▦" }, { id: "study", label: "Study", icon: "✦" }, { id: "career", label: "Career", icon: "↗" }, { id: "development", label: "Build lab", icon: "⌘" }, { id: "port", label: "Investment", icon: "⇄" },
+  { id: "dashboard", label: "Today", icon: "⌂" }, { id: "teams", label: "Team grid", icon: "◈" }, { id: "exam", label: "Exam", icon: "◎" }, { id: "pipeline", label: "Pipeline", icon: "⌁" }, { id: "tasks", label: "Tasks", icon: "✓" }, { id: "focus", label: "Focus", icon: "◷" }, { id: "calendar", label: "Calendar", icon: "▦" }, { id: "study", label: "Study", icon: "✦" }, { id: "career", label: "Career", icon: "↗" }, { id: "development", label: "Build lab", icon: "⌘" }, { id: "port", label: "Investment", icon: "⇄" },
 ];
 
 const teamOrder: Team[] = ["Orchestrator", "Shared", "Career", "Development"];
@@ -158,6 +159,7 @@ function LoadedAppShell() {
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
       {view === "dashboard" && <Dashboard calendarId={calendarId} allTasks={storedTasks} onCreateTask={addTask} onViewTasks={() => setView("tasks")} tasks={tasks} runs={runs} onRoute={routeRequest} onOpenAgent={openAgent} />}
       {view === "teams" && <TeamGrid onOpenAgent={openAgent} />}
+      {view === "exam" && <ExamView subjects={subjects} />}
       {view === "pipeline" && <PipelineView runs={runs} onRoute={routeRequest} onSaveResponse={saveResponse} storageError={storageError} onCreateTask={addTask} />}
       {view === "focus" && <FocusDashboard tasks={storedTasks} subjects={subjects} session={activeFocus} loading={synced?.status === "กำลังโหลด" && !storedTasks.length} error={synced?.error || saveError} retry={() => { if (cloud) void cloud.sync(true); else { setTasks(readStorage(storageKeys.tasks, localTasks)); setSaveError(""); } }} chooseTasks={() => setView("tasks")} />}
       {view === "tasks" && <TaskTimelineView tasks={tasks} />}
