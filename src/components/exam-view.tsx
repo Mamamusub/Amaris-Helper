@@ -3,29 +3,12 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type { Subject } from "@/lib/types";
 import styles from "./exam-view.module.css";
+import { EXAM_KEY, CHECKLIST_KEY, EXAM_CHANGED, readExamData, type ExamInfo, type ExamMap, type ChecklistMap } from "@/lib/exam-storage";
 
 type Props = {
   subjects: Subject[];
+  initialSubjectId?: string;
 };
-
-type ExamInfo = {
-  id: string;
-  date: string;
-  time: string;
-  room: string;
-  type: "Quiz" | "Midterm" | "Final";
-  calendarName: string;
-};
-
-type ExamMap = Record<string, ExamInfo[]>;
-
-type ChecklistItem = {
-  id: string;
-  text: string;
-  done: boolean;
-};
-
-type ChecklistMap = Record<string, ChecklistItem[]>;
 
 type StoredFile = {
   id: string;
@@ -36,9 +19,6 @@ type StoredFile = {
   createdAt: string;
   blob: Blob;
 };
-
-const EXAM_KEY = "amaris.exam.info";
-const CHECKLIST_KEY = "amaris.exam.checklist";
 
 const DB_NAME = "amaris-exam-files";
 const STORE_NAME = "files";
@@ -159,12 +139,12 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export default function ExamView({ subjects }: Props) {
+export default function ExamView({ subjects, initialSubjectId }: Props) {
   const [examInfo, setExamInfo] = useState<ExamMap>({});
   const [checklists, setChecklists] = useState<ChecklistMap>({});
 
   const [selectedSubjectId, setSelectedSubjectId] =
-    useState<string>("");
+    useState<string>(initialSubjectId ?? "");
 
   const [newChecklistItem, setNewChecklistItem] = useState("");
 
@@ -174,66 +154,9 @@ export default function ExamView({ subjects }: Props) {
     useState(() => new Date());
 
 useEffect(() => {
-  const storedExam = localStorage.getItem(EXAM_KEY);
-  const storedChecklist =
-    localStorage.getItem(CHECKLIST_KEY);
-
-  if (storedExam) {
-    try {
-      const parsed = JSON.parse(storedExam);
-
-      const migrated: ExamMap = Object.fromEntries(
-        Object.entries(parsed).map(([subjectId, value]) => {
-          if (Array.isArray(value)) {
-            return [subjectId, value];
-          }
-
-          const oldExam = value as {
-            date?: string;
-            time?: string;
-            room?: string;
-            type?: string;
-            calendarName?: string;
-          };
-
-          const examType: ExamInfo["type"] =
-            oldExam.type === "Quiz" ||
-            oldExam.type === "Final" ||
-            oldExam.type === "Midterm"
-              ? oldExam.type
-              : "Midterm";
-
-          return [
-            subjectId,
-            [
-              {
-                id: crypto.randomUUID(),
-                date: oldExam.date ?? "",
-                time: oldExam.time ?? "",
-                room: oldExam.room ?? "",
-                type: examType,
-                calendarName: oldExam.calendarName ?? "",
-              },
-            ],
-          ];
-        })
-      );
-
-      setExamInfo(migrated);
-      localStorage.setItem(
-        EXAM_KEY,
-        JSON.stringify(migrated)
-      );
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
-  if (storedChecklist) {
-    try {
-      setChecklists(JSON.parse(storedChecklist));
-    } catch {}
-  }
+  const data = readExamData(localStorage);
+  setExamInfo(data.exams);
+  setChecklists(data.checklists);
 
   getStoredFiles()
     .then(setFiles)
@@ -249,6 +172,7 @@ useEffect(() => {
   function saveExamInfo(next: ExamMap) {
     setExamInfo(next);
     localStorage.setItem(EXAM_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event(EXAM_CHANGED));
   }
 
   function saveChecklist(next: ChecklistMap) {
@@ -258,6 +182,7 @@ useEffect(() => {
       CHECKLIST_KEY,
       JSON.stringify(next)
     );
+    window.dispatchEvent(new Event(EXAM_CHANGED));
   }
 
   const selectedSubject =

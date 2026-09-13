@@ -24,3 +24,9 @@ export function totals(entries: Entry[]) {
   return { income, expense, balance: income - expense };
 }
 export const money = (cents: number) => new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" }).format(cents / 100);
+export function monthCells(month: string) {
+  const [year, index] = month.split("-").map(Number);
+  const first = new Date(year, index - 1, 1).getDay();
+  const count = new Date(year, index, 0).getDate();
+  return Array.from({ length: 42 }, (_, i) => i >= first && i < first + count ? `${month}-${String(i - first + 1).padStart(2, "0")}` : null);
+}

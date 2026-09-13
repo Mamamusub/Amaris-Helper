@@ -6,6 +6,18 @@ import ts from "typescript";
 const mod = { exports: {} };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync("src/lib/finance.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module: mod, exports: mod.exports, Date, Intl });
 const { parseAmount, validDate, totals, readEntries } = mod.exports;
+test("calendar keeps 42 fixed cells with correct weekdays, leap days and six-week months", () => {
+  for (const [month, days] of [["2026-02", 28], ["2028-02", 29], ["2026-08", 31], ["2026-12", 31]]) {
+    const cells = mod.exports.monthCells(month);
+    assert.equal(cells.length, 42);
+    assert.equal(cells.filter(Boolean).length, days);
+    assert.equal(cells.indexOf(`${month}-01`), new Date(`${month}-01T12:00:00`).getDay());
+    assert.equal(cells.filter(Boolean).at(-1), `${month}-${days}`);
+  }
+  const entries = [{ date: "2026-09-14", type: "income", amount: 12345 }, { date: "2026-09-14", type: "expense", amount: 2000 }, { date: "2026-09-15", type: "income", amount: 999 }];
+  const day = totals(entries.filter((entry) => entry.date === "2026-09-14"));
+  assert.equal(day.income, 12345); assert.equal(day.expense, 2000);
+});
 test("money accepts cents precisely and rejects invalid amounts", () => {
   assert.equal(parseAmount("0.10") + parseAmount("0.20"), 30);
   assert.equal(parseAmount("1250.5"), 125050);
