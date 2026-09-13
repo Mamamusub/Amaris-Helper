@@ -30,6 +30,7 @@
 @media(max-width:600px) { .stats { grid-template-columns:1fr 1fr; gap:10px; }.stat { padding:16px; }.balance { grid-column:1/-1; }.heading h2 { font-size:25px; }.heading>.actions { width:100%; justify-content:space-between; }.panel { padding:16px; }.entry { flex-wrap:wrap; }.entry>strong { margin-left:48px; }.description { flex-basis:calc(100% - 48px); }.dialog { padding:20px; }.overlay { padding:12px; }.formGrid { grid-template-columns:1fr; } }
 
 .sideRail { display:grid; gap:20px; min-width:0; }
+.savedMonths { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:18px; color:#68725e; font-size:12px; }
 .categoryManager { margin-bottom:20px; padding:16px 20px; background:#fffef9; border:1px solid #dce1d2; border-radius:14px; }
 .categoryManager summary { cursor:pointer; font-size:14px; font-weight:600; padding:4px 0; }
 .categoryManager>p { font-size:12px; color:#68725e; line-height:1.7; }

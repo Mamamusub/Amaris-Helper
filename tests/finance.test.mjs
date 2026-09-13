@@ -6,6 +6,18 @@ import ts from "typescript";
 const mod = { exports: {} };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync("src/lib/finance.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module: mod, exports: mod.exports, Date, Intl });
 const { parseAmount, validDate, totals, readEntries } = mod.exports;
+test("refresh restores the selected month and finds entries outside the current month", () => {
+  const { financeMonth } = mod.exports;
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key) ?? null };
+  const entries = [{ date: "2026-08-12" }, { date: "2026-07-14" }];
+  assert.equal(financeMonth(storage, "account.finance", entries, "2026-09"), "2026-08");
+  values.set("account.finance.month", "2026-07");
+  assert.equal(financeMonth(storage, "account.finance", entries, "2026-09"), "2026-07");
+  assert.equal(financeMonth(storage, "other.finance", [], "2026-09"), "2026-09");
+  values.set("account.finance.month", "bad");
+  assert.equal(financeMonth(storage, "account.finance", entries, "2026-09"), "2026-08");
+});
 test("custom categories persist, reject duplicates and keep a final option", () => {
   const { readCategories, changeCategory } = mod.exports;
   const defaults = readCategories({ getItem: () => null }, "categories");

@@ -22,6 +22,14 @@ export function changeCategory(current: CategoryMap, type: "income" | "expense",
   return { ...current, [type]: [...current[type], name] };
 }
 export type Entry = { id: string; type: "income" | "expense"; amount: number; title: string; category: string; date: string; note: string; updatedAt: string };
+export function financeMonth(storage: Pick<Storage, "getItem">, key: string, entries: Entry[], currentMonth: string) {
+  try {
+    const saved = storage.getItem(`${key}.month`);
+    if (saved && /^\d{4}-(0[1-9]|1[0-2])$/.test(saved) && saved >= "1900-01" && saved <= "9999-12") return saved;
+  } catch { /* Entries remain readable even if preferences are unavailable. */ }
+  const months = [...new Set(entries.map((entry) => entry.date.slice(0, 7)))].sort();
+  return months.includes(currentMonth) ? currentMonth : months.at(-1) ?? currentMonth;
+}
 export function parseAmount(value: string): number | null {
   if (!/^\d{1,9}(\.\d{1,2})?$/.test(value)) return null;
   const [whole, fraction = ""] = value.split(".");

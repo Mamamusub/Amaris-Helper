@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { categories as defaultCategories, readCategories, changeCategory, money, parseAmount, readEntries, totals, validDate, type Entry } from "@/lib/finance";
+import { categories as defaultCategories, readCategories, changeCategory, financeMonth, money, parseAmount, readEntries, totals, validDate, type Entry } from "@/lib/finance";
 import { dayKey } from "@/lib/calendar";
 import { useCloud } from "./account-boundary";
 import { dialogKeyboard } from "./dialog-keyboard";
@@ -22,7 +22,11 @@ export default function FinanceView() {
   const categoryKey = `${key}.categories`;
   const [categories, setCategories] = useState(() => { try { return readCategories(localStorage, categoryKey); } catch { return defaultCategories; } });
   const [state, setState] = useState(() => initial(key));
-  const [month, setMonth] = useState(() => dayKey(new Date()).slice(0, 7));
+  const [month, updateMonth] = useState(() => financeMonth(localStorage, key, state.entries, dayKey(new Date()).slice(0, 7)));
+  function setMonth(value: string) {
+    updateMonth(value);
+    try { localStorage.setItem(`${key}.month`, value); } catch { /* Saving an entry must not fail because of a view preference. */ }
+  }
   const [filter, setFilter] = useState<"all" | Entry["type"]>("all");
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
@@ -93,6 +97,7 @@ export default function FinanceView() {
     {state.error && <div role="alert" className={styles.error}>{state.error} <button onClick={() => setState(initial(key))}>โหลดข้อมูลอีกครั้ง</button></div>}
     <div role="status" className={styles.notice}>{notice}</div>
     <div className={styles.stats}>{([["รายรับเดือนนี้", summary.income, "income"], ["รายจ่ายเดือนนี้", summary.expense, "expense"], ["คงเหลือสุทธิ", summary.balance, "balance"]] as const).map(([label, amount, tone]) => <section key={tone} className={`${styles.stat} ${styles[tone]}`}><span>{label}</span><strong>{money(amount)}</strong><small>{tone === "balance" ? "รายรับ − รายจ่าย ของเดือนที่เลือก" : `${monthly.filter((e) => e.type === tone).length} รายการ`}</small></section>)}</div>
+    {!!state.entries.length && <div className={styles.savedMonths}><span>ข้อมูลที่บันทึกไว้ทั้งหมด {state.entries.length} รายการ</span><label>เดือนที่มีข้อมูล<select aria-label="ไปยังเดือนที่มีรายการบันทึก" value={state.entries.some((entry) => entry.date.startsWith(month)) ? month : ""} onChange={(event) => { if (event.target.value) { setMonth(event.target.value); setFilter("all"); setCategory(""); setSearch(""); } }}><option value="" disabled>เลือกเดือนที่มีข้อมูล</option>{[...new Set(state.entries.map((entry) => entry.date.slice(0, 7)))].sort().reverse().map((value) => <option key={value} value={value}>{value} · {state.entries.filter((entry) => entry.date.startsWith(value)).length} รายการ</option>)}</select></label></div>}
     <FinanceCategories value={categories} onChange={manageCategory} />
     <div className={styles.columns}><div className={styles.sideRail}><section className={styles.panel}><div className={styles.panelHeading}><h3>รายการบัญชี</h3><span>{shown.length} รายการ</span></div><div className={styles.filters}><div className={styles.tabs}>{([["all", "ทั้งหมด"], ["income", "รายรับ"], ["expense", "รายจ่าย"]] as const).map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => { setFilter(value); setCategory(""); }}>{label}</button>)}</div><input aria-label="ค้นหารายการ" placeholder="ค้นหาชื่อหรือหมายเหตุ…" value={search} onChange={(e) => setSearch(e.target.value)} /><select aria-label="กรองหมวดหมู่" value={category} onChange={(e) => setCategory(e.target.value)}><option value="">ทุกหมวดหมู่</option>{(filter === "all" ? [...new Set([...availableCategories("income"), ...availableCategories("expense")])] : availableCategories(filter)).map((c) => <option key={c}>{c}</option>)}</select></div>
       {!shown.length && <div className={styles.empty}><span>฿</span><h3>{monthly.length ? "ไม่พบรายการที่ตรงกับตัวกรอง" : "เริ่มบันทึกเงินเข้าและเงินออก"}</h3><p>{monthly.length ? "ลองเปลี่ยนคำค้นหาหรือหมวดหมู่" : "เพิ่มรายการแรกของเดือนนี้ เพื่อดูภาพรวมการใช้จ่าย"}</p>{!monthly.length && <button className="secondary-button" disabled={!!state.error} onClick={() => open()}>+ เพิ่มรายการแรก</button>}</div>}
