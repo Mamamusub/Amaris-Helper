@@ -300,7 +300,7 @@ function deleteExam(
       ...checklists,
       [selectedSubject.id]: current.map((item) =>
         item.id === id
-          ? { ...item, done: !item.done }
+          ? { ...item, done: !item.done, doneAt: item.done ? undefined : new Date().toISOString() }
           : item
       ),
     });

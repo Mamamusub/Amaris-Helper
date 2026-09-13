@@ -12,6 +12,7 @@ import { Agent, AgentRun, ChatMessage, PipelineImage, Subject, Task, Team } from
 import ExamView from "./exam-view";
 import FinanceView from "./finance-view";
 import NextExams from "./next-exams";
+import SemesterView from "./semester-view";
 
 import { TaskContext, TaskControls, TaskEditor } from "@/components/task-controls";
 import { liveTasks, todayTasks, updateTask, migrateTasks, sortTasksByDeadline, detachSubject } from "@/lib/task-model";
@@ -31,7 +32,7 @@ import SubjectCount from "@/components/subject-count";
 
 import RecurringTasks, { GoLessonButton } from "@/components/recurring-tasks";
 
-type View = "focus" | "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "exam"| "career" | "finance" | "development" | "port" | "settings";
+type View = "semester" | "focus" | "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "exam"| "career" | "finance" | "development" | "port" | "settings";
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "Today", icon: "⌂" },
   { id: "teams", label: "Team Grid", icon: "◈" },
@@ -40,6 +41,7 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "tasks", label: "Task", icon: "✓" },
   { id: "focus", label: "Focus", icon: "◷" },
   { id: "exam", label: "Exam", icon: "◎" },
+  { id: "semester", label: "Semester", icon: "?" },
   { id: "study", label: "Study", icon: "✦" },
   { id: "career", label: "Career", icon: "↗" },
   { id: "finance", label: "Income and expenses", icon: "฿" },
@@ -173,6 +175,7 @@ function LoadedAppShell() {
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
       {view === "dashboard" && <Dashboard subjects={subjects} onOpenExam={(id) => { setExamSubjectId(id); setView("exam"); }} calendarId={calendarId} allTasks={storedTasks} onCreateTask={addTask} onViewTasks={() => setView("tasks")} tasks={tasks} runs={runs} onRoute={routeRequest} onOpenAgent={openAgent} />}
       {view === "teams" && <TeamGrid onOpenAgent={openAgent} />}
+      {view === "semester" && <SemesterView subjects={subjects} tasks={storedTasks} onStudy={openSubject} onExam={(id) => { setExamSubjectId(id); setView("exam"); }} loading={synced?.status === "กำลังโหลด" && !subjects.length} />}
       {view === "exam" && <ExamView subjects={subjects} initialSubjectId={examSubjectId} />}
       {view === "pipeline" && <PipelineView runs={runs} onRoute={routeRequest} onSaveResponse={saveResponse} storageError={storageError} onCreateTask={addTask} />}
       {view === "focus" && <FocusDashboard tasks={storedTasks} subjects={subjects} session={activeFocus} loading={synced?.status === "กำลังโหลด" && !storedTasks.length} error={synced?.error || saveError} retry={() => { if (cloud) void cloud.sync(true); else { setTasks(readStorage(storageKeys.tasks, localTasks)); setSaveError(""); } }} chooseTasks={() => setView("tasks")} />}

@@ -4,7 +4,7 @@ export const CHECKLIST_KEY = "amaris.exam.checklist";
 export const EXAM_CHANGED = "amaris:exam-changed";
 export type ExamInfo = { id: string; date: string; time: string; room: string; type: "Quiz" | "Midterm" | "Final"; calendarName: string };
 export type ExamMap = Record<string, ExamInfo[]>;
-export type ChecklistItem = { id: string; text: string; done: boolean };
+export type ChecklistItem = { id: string; text: string; done: boolean; doneAt?: string };
 export type ChecklistMap = Record<string, ChecklistItem[]>;
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const text = (value: unknown) => typeof value === "string" ? value : "";
@@ -16,7 +16,7 @@ export function dateNumber(date: string) {
 export function readExamData(storage: Pick<Storage, "getItem">) {
   const read = (key: string): Record<string, unknown> => { try { const value: unknown = JSON.parse(storage.getItem(key) ?? "{}"); return object(value) ? value : {}; } catch { return {}; } };
   const exams: ExamMap = Object.fromEntries(Object.entries(read(EXAM_KEY)).map(([subjectId, value]) => [subjectId, (Array.isArray(value) ? value : [value]).filter(object).map((exam, index): ExamInfo => ({ id: text(exam.id) || `legacy-${subjectId}-${index}`, date: text(exam.date), time: /^([01]\d|2[0-3]):[0-5]\d$/.test(text(exam.time)) ? text(exam.time) : "", room: text(exam.room), type: exam.type === "Quiz" || exam.type === "Final" ? exam.type : "Midterm", calendarName: text(exam.calendarName) }))]));
-  const checklists: ChecklistMap = Object.fromEntries(Object.entries(read(CHECKLIST_KEY)).map(([subjectId, value]) => [subjectId, (Array.isArray(value) ? value : []).filter(object).filter((item) => typeof item.text === "string").map((item, index) => ({ id: text(item.id) || `legacy-topic-${subjectId}-${index}`, text: text(item.text), done: item.done === true }))]));
+  const checklists: ChecklistMap = Object.fromEntries(Object.entries(read(CHECKLIST_KEY)).map(([subjectId, value]) => [subjectId, (Array.isArray(value) ? value : []).filter(object).filter((item) => typeof item.text === "string").map((item, index) => ({ id: text(item.id) || `legacy-topic-${subjectId}-${index}`, text: text(item.text), done: item.done === true, ...(typeof item.doneAt === "string" ? { doneAt: item.doneAt } : {}) }))]));
   return { exams, checklists };
 }
 export function upcomingExams(subjects: Subject[], data: ReturnType<typeof readExamData>, today: string) {

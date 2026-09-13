@@ -56,6 +56,7 @@ export type Task = {
 };
 
 export type Subject = {
+  semesterId?: string;
   id: string;
   name: string;
   color: string;
