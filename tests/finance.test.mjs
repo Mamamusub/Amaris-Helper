@@ -6,6 +6,18 @@ import ts from "typescript";
 const mod = { exports: {} };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync("src/lib/finance.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module: mod, exports: mod.exports, Date, Intl });
 const { parseAmount, validDate, totals, readEntries } = mod.exports;
+test("custom categories persist, reject duplicates and keep a final option", () => {
+  const { readCategories, changeCategory } = mod.exports;
+  const defaults = readCategories({ getItem: () => null }, "categories");
+  const added = changeCategory(defaults, "expense", "  Travel abroad  ", false);
+  assert.equal(added.expense.at(-1), "Travel abroad");
+  assert.throws(() => changeCategory(added, "expense", "travel abroad", false));
+  const saved = readCategories({ getItem: () => JSON.stringify(added) }, "categories");
+  assert.equal(saved.expense.at(-1), "Travel abroad");
+  assert.equal(changeCategory(saved, "expense", "Travel abroad", true).expense.includes("Travel abroad"), false);
+  assert.throws(() => changeCategory({ income: ["Salary"], expense: ["Food"] }, "expense", "Food", true));
+  assert.throws(() => readCategories({ getItem: () => "broken" }, "categories"));
+});
 test("calendar keeps 42 fixed cells with correct weekdays, leap days and six-week months", () => {
   for (const [month, days] of [["2026-02", 28], ["2028-02", 29], ["2026-08", 31], ["2026-12", 31]]) {
     const cells = mod.exports.monthCells(month);

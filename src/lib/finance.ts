@@ -2,6 +2,25 @@ export const categories = {
   income: ["เงินเดือน", "ฟรีแลนซ์", "ขายสินค้า", "รายรับอื่น ๆ"],
   expense: ["อาหาร", "เดินทาง", "ที่อยู่อาศัย", "ช้อปปิ้ง", "สุขภาพ", "การศึกษา", "บันเทิง", "รายจ่ายอื่น ๆ"],
 };
+export type CategoryMap = Record<"income" | "expense", string[]>;
+export function readCategories(storage: Pick<Storage, "getItem">, key: string): CategoryMap {
+  const raw = storage.getItem(key);
+  if (!raw) return { income: [...categories.income], expense: [...categories.expense] };
+  const data = JSON.parse(raw);
+  if (!data || !["income", "expense"].every((type) => Array.isArray(data[type]) && data[type].length && data[type].every((name: unknown) => typeof name === "string" && name.trim() && name.length <= 40))) throw new Error("Invalid categories");
+  return { income: [...new Set<string>(data.income)], expense: [...new Set<string>(data.expense)] };
+}
+export function changeCategory(current: CategoryMap, type: "income" | "expense", raw: string, remove: boolean): CategoryMap {
+  const name = raw.trim();
+  if (!name || name.length > 40) throw new Error("กรอกชื่อหมวดหมู่ 1–40 ตัวอักษร");
+  if (remove) {
+    const remaining = current[type].filter((item) => item !== name);
+    if (!remaining.length) throw new Error("ต้องเหลืออย่างน้อย 1 หมวดหมู่ต่อประเภท");
+    return { ...current, [type]: remaining };
+  }
+  if (current[type].some((item) => item.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error("มีหมวดหมู่นี้แล้ว");
+  return { ...current, [type]: [...current[type], name] };
+}
 export type Entry = { id: string; type: "income" | "expense"; amount: number; title: string; category: string; date: string; note: string; updatedAt: string };
 export function parseAmount(value: string): number | null {
   if (!/^\d{1,9}(\.\d{1,2})?$/.test(value)) return null;

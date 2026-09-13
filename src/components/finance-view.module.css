@@ -30,3 +30,13 @@
 @media(max-width:600px) { .stats { grid-template-columns:1fr 1fr; gap:10px; }.stat { padding:16px; }.balance { grid-column:1/-1; }.heading h2 { font-size:25px; }.heading>.actions { width:100%; justify-content:space-between; }.panel { padding:16px; }.entry { flex-wrap:wrap; }.entry>strong { margin-left:48px; }.description { flex-basis:calc(100% - 48px); }.dialog { padding:20px; }.overlay { padding:12px; }.formGrid { grid-template-columns:1fr; } }
 
 .sideRail { display:grid; gap:20px; min-width:0; }
+.categoryManager { margin-bottom:20px; padding:16px 20px; background:#fffef9; border:1px solid #dce1d2; border-radius:14px; }
+.categoryManager summary { cursor:pointer; font-size:14px; font-weight:600; padding:4px 0; }
+.categoryManager>p { font-size:12px; color:#68725e; line-height:1.7; }
+.categoryManager .tabs { max-width:320px; }
+.categoryForm { display:flex; gap:10px; margin:14px 0; max-width:480px; }
+.categoryForm input { flex:1; width:0; }
+.categoryList { display:flex; flex-wrap:wrap; gap:8px; list-style:none; padding:0; margin:0; }
+.categoryList li { display:flex; align-items:center; gap:10px; background:#f0f3e7; border-radius:9px; padding:0 5px 0 12px; font-size:12px; max-width:100%; }
+.categoryList li span { overflow-wrap:anywhere; }
+.categoryList button { border:0; background:transparent; color:#896450; font-size:20px; width:36px; flex-shrink:0; }
