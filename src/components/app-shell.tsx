@@ -10,6 +10,7 @@ import { CalendarEvent, eventDeadline, eventSubjectId, eventSubjectName } from "
 import { demoMessages, demoSubjects, demoTasks, readStorage, storageKeys, StoredMessages, writeStorage } from "@/lib/storage";
 import { Agent, AgentRun, ChatMessage, PipelineImage, Subject, Task, Team } from "@/lib/types";
 import ExamView from "./exam-view";
+import FinanceView from "./finance-view";
 
 import { TaskContext, TaskControls, TaskEditor } from "@/components/task-controls";
 import { liveTasks, todayTasks, updateTask, migrateTasks, sortTasksByDeadline, detachSubject } from "@/lib/task-model";
@@ -29,9 +30,20 @@ import SubjectCount from "@/components/subject-count";
 
 import RecurringTasks, { GoLessonButton } from "@/components/recurring-tasks";
 
-type View = "focus" | "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "exam"| "career" | "development" | "port" | "settings";
+type View = "focus" | "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "exam"| "career" | "finance" | "development" | "port" | "settings";
 const navItems: { id: View; label: string; icon: string }[] = [
-  { id: "dashboard", label: "Today", icon: "⌂" }, { id: "teams", label: "Team grid", icon: "◈" }, { id: "exam", label: "Exam", icon: "◎" }, { id: "pipeline", label: "Pipeline", icon: "⌁" }, { id: "tasks", label: "Tasks", icon: "✓" }, { id: "focus", label: "Focus", icon: "◷" }, { id: "calendar", label: "Calendar", icon: "▦" }, { id: "study", label: "Study", icon: "✦" }, { id: "career", label: "Career", icon: "↗" }, { id: "development", label: "Build lab", icon: "⌘" }, { id: "port", label: "Investment", icon: "⇄" },
+  { id: "dashboard", label: "Today", icon: "⌂" },
+  { id: "teams", label: "Team Grid", icon: "◈" },
+  { id: "pipeline", label: "Pipeline", icon: "⌁" },
+  { id: "calendar", label: "Calendar", icon: "▦" },
+  { id: "tasks", label: "Task", icon: "✓" },
+  { id: "focus", label: "Focus", icon: "◷" },
+  { id: "exam", label: "Exam", icon: "◎" },
+  { id: "study", label: "Study", icon: "✦" },
+  { id: "career", label: "Career", icon: "↗" },
+  { id: "finance", label: "Income and expenses", icon: "฿" },
+  { id: "port", label: "Investment", icon: "⇄" },
+  { id: "development", label: "Build lab", icon: "⌘" },
 ];
 
 const teamOrder: Team[] = ["Orchestrator", "Shared", "Career", "Development"];
@@ -168,6 +180,7 @@ function LoadedAppShell() {
       {view === "development" && <TeamView team="Development" onOpenAgent={openAgent} />}
       {view === "calendar" && <DeadlineCalendar selectedCalendarId={calendarId} onCalendarSelected={setCalendarId} tasks={storedTasks} subjects={subjects} onCreateTask={addTask} onAssignAll={assignCalendarEvents} onSettings={() => setView("settings")} />}
       {view === "port" && <PortView />}
+      {view === "finance" && <FinanceView />}
       {view === "settings" && <SettingsView />}
     </main>
     {selectedAgent && <AgentWorkspaceV3 agent={selectedAgent} messages={messages[selectedAgent.id] ?? []} setMessages={setMessages} onClose={() => setSelectedAgent(null)} onCreateTask={(task) => addTask({ ...task, subjectId: subjects.some((subject) => subject.id === selectedAgent.id) ? selectedAgent.id : task.subjectId })} onRoute={routeRequest} />}
