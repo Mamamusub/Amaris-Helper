@@ -15,7 +15,7 @@
 .stat>strong { font-size:clamp(22px,2.3vw,34px); overflow-wrap:anywhere; }
 .stat>span { font-size:13px; }.stat small { color:#68725e; font-size:11px; }
 .income { color:#3c6a3b; }.expense { color:#a14e32; }.balance { background:#e7edda; color:#33452b; }
-.columns { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:24px; align-items:start; }
+.columns { display:grid; grid-template-columns:minmax(320px,1fr) minmax(0,1.15fr); gap:24px; align-items:start; }
 .panel { background:#fffef9; border:1px solid #dce1d2; border-radius:16px; padding:22px; min-width:0; }
 .panelHeading h3 { margin:0; font-size:17px; }.panelHeading>span { font-size:12px; color:#68725e; }
 .filters { display:flex; flex-wrap:wrap; gap:10px; margin:22px 0; }.filters input { flex:1; width:140px; }.filters select { width:150px; }
@@ -28,3 +28,5 @@
 .overlay { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; background:#26302066; padding:20px; backdrop-filter:blur(3px); }.dialog { background:#fffef9; border:1px solid #dce1d2; border-radius:20px; padding:26px; width:520px; max-width:100%; max-height:90dvh; overflow:auto; box-shadow:0 24px 80px #26302030; }.dialog .panelHeading { margin-bottom:20px; }.dialog .panelHeading button { background:none; border:0; font-size:25px; color:#59634f; }.dialog form { display:flex; flex-direction:column; gap:18px; }.dialog .amount { font-size:30px; }.formGrid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }.error { background:#fff0e8; padding:12px; color:#944529; border-radius:10px; font-size:13px; line-height:1.7; }
 @media(max-width:1100px) { .columns { grid-template-columns:minmax(0,1fr); }.heading { align-items:flex-start; flex-wrap:wrap; } }
 @media(max-width:600px) { .stats { grid-template-columns:1fr 1fr; gap:10px; }.stat { padding:16px; }.balance { grid-column:1/-1; }.heading h2 { font-size:25px; }.heading>.actions { width:100%; justify-content:space-between; }.panel { padding:16px; }.entry { flex-wrap:wrap; }.entry>strong { margin-left:48px; }.description { flex-basis:calc(100% - 48px); }.dialog { padding:20px; }.overlay { padding:12px; }.formGrid { grid-template-columns:1fr; } }
+
+.sideRail { display:grid; gap:20px; min-width:0; }
