@@ -12,6 +12,7 @@ import { Agent, AgentRun, ChatMessage, PipelineImage, Subject, Task, Team } from
 import ExamView from "./exam-view";
 import FinanceView from "./finance-view";
 import NextExams from "./next-exams";
+import CareerView from "./career-view";
 import SemesterView from "./semester-view";
 
 import { TaskContext, TaskControls, TaskEditor } from "@/components/task-controls";
@@ -181,7 +182,7 @@ function LoadedAppShell() {
       {view === "focus" && <FocusDashboard tasks={storedTasks} subjects={subjects} session={activeFocus} loading={synced?.status === "กำลังโหลด" && !storedTasks.length} error={synced?.error || saveError} retry={() => { if (cloud) void cloud.sync(true); else { setTasks(readStorage(storageKeys.tasks, localTasks)); setSaveError(""); } }} chooseTasks={() => setView("tasks")} />}
       {view === "tasks" && <TaskTimelineView tasks={tasks} />}
       {view === "study" && <StudyAssignmentsView subjects={subjects} setSubjects={commitSubjects} tasks={tasks} onOpenAgent={openAgent} selectedSubjectId={subjectId} />}
-      {view === "career" && <TeamView team="Career" onOpenAgent={openAgent} />}
+      {view === "career" && <CareerView tasks={storedTasks} onCreateTask={() => { const now = new Date().toISOString(); setEditorVersion(0); setEditor({ id: crypto.randomUUID(), title: "", description: "", team: "Career", assignedAgent: "secretary", status: "Planned", priority: "Medium", deadline: "", focused: true, createdAt: now, updatedAt: now }); }}><div className="agent-cards wide">{agents.filter((agent) => agent.team === "Career").map((agent) => <AgentCard key={agent.id} agent={agent} onClick={() => openAgent(agent)} />)}</div></CareerView>}
       {view === "development" && <TeamView team="Development" onOpenAgent={openAgent} />}
       {view === "calendar" && <DeadlineCalendar selectedCalendarId={calendarId} onCalendarSelected={setCalendarId} tasks={storedTasks} subjects={subjects} onCreateTask={addTask} onAssignAll={assignCalendarEvents} onSettings={() => setView("settings")} />}
       {view === "port" && <PortView />}
