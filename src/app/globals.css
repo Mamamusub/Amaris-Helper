@@ -251,3 +251,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .subject-count-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid #dce2d3; font-size: 12px; }
 .subject-count-detail ul { padding-left: 20px; }
 @media (max-width: 480px) { .subject-count { padding: 12px; } .subject-count-body { gap: 10px; } .subject-mini-calendar { flex: 1; width: auto; } .subject-count-total { flex: 0 0 82px; font-size: 11px; } .subject-count-total strong { font-size: 36px; } .subject-count-heading { flex-wrap: wrap; } }
+@media (max-width:850px) {
+  .sidebar { flex-shrink:0; }
+  .sidebar .brand>div:last-child,.sidebar .workspace-switcher>div,.sidebar .workspace-switcher .chevron { display:none; }
+  .sidebar .brand { padding-left:8px; padding-right:0; }
+  .sidebar .brand-mark,.sidebar .mini-mark { flex-shrink:0; }
+  .sidebar .workspace-switcher { padding:8px; justify-content:center; }
+  .main-stage { min-width:0; }
+}

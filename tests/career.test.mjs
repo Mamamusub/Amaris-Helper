@@ -7,10 +7,10 @@ const mod = { exports: {} };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync("src/lib/career-storage.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module: mod, exports: mod.exports, URL });
 const { careerDefaults, careerReadiness, readCareer, writeCareer, careerKey, safeCareerUrl, projectStatus } = mod.exports;
 function memory() { const values = new Map(); return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }; }
-test("readiness is deterministic, zero initially and 100 when all four groups are complete", () => {
+test("readiness is deterministic, zero initially and 100 when all three preparation groups are complete", () => {
   const data = careerDefaults(); assert.equal(careerReadiness(data).total, 0);
   data.resume.forEach((item) => item.checks.fill(true));
-  assert.equal(careerReadiness(data).total, 25);
+  assert.equal(careerReadiness(data).total, 33);
   data.projects.forEach((item) => item.checks.fill(true));
   data.skills.forEach((item) => item.level = "Comfortable");
   data.applications.forEach((item) => item.status = "Rejected");
@@ -55,3 +55,34 @@ test("checklists, skill levels and resume links persist; only web links are navi
   for (const link of ["javascript:alert(1)", "data:text/html,hello", "/relative", ""]) assert.equal(safeCareerUrl(link), null);
   assert.equal(safeCareerUrl("https://example.com"), "https://example.com/");
 });
+
+test("legacy migration preserves evidence, adds defaults and separates document dates", () => {
+ const storage = memory(); const legacy = careerDefaults(); legacy.resume[0].checks = [true,false,true,true,false];
+ for (const [section,value] of Object.entries(legacy)) storage.setItem(careerKey("legacy",section),JSON.stringify(value));
+ const data = readCareer(storage,"legacy");
+ assert.equal(data.applications[0].nextAction, ""); assert.equal(data.resume[0].checks.length,8); assert.equal(data.resume[0].checks[2],true);
+ assert.equal(data.resume[0].documentUpdatedAt, ""); assert.equal(data.projects[0].sample,true);
+ const edited = data.resume.map(item => ({...item, checks:item.checks.map(() => true), updatedAt:"2026-09-14"}));
+ writeCareer(storage,"legacy","resume",edited,data.resume); assert.equal(readCareer(storage,"legacy").resume[0].documentUpdatedAt, "");
+});
+test("selected evidence ignores spare drafts and applications; all N/A stays zero", () => {
+ const data = careerDefaults(); data.goal.resumeId = data.resume[0].id; data.goal.projectIds = [data.projects[0].id]; data.goal.skillIds = [data.skills[0].id];
+ data.resume[0].checks.fill(true); data.projects[0].checks.fill(true); data.skills[0].level = "Comfortable";
+ assert.equal(careerReadiness(data).total,100); data.applications.push({...data.applications[0],id:"spare"}); assert.equal(careerReadiness(data).total,100);
+ data.resume[0].checks.fill("na"); data.projects[0].checks.fill("na"); data.goal.skillIds = [];
+ assert.equal(careerReadiness(data).total,0); assert.equal(projectStatus(data.projects[0]),"Needs work");
+ data.resume=[]; data.projects=[]; assert.equal(careerReadiness(data).total,0);
+});
+test("application references survive resume deletion; dates and duplicate task keys are stable", () => {
+ const storage=memory(); let data=readCareer(storage,"local"); const apps=data.applications.map(app=>({...app,resumeId:data.resume[0].id}));
+ writeCareer(storage,"local","applications",apps,data.applications); writeCareer(storage,"local","resume",[],data.resume);
+ data=readCareer(storage,"local"); assert.equal(data.applications[0].resumeId,"resume-0");
+ const {applicationDates,careerDate,careerTaskId}=mod.exports;
+ assert.equal(applicationDates({...data.applications[0],deadline:"",interviewDate:"2027-01-03T10:00",followUpDate:"2027-01-05"})[0].label,"Interview");
+ assert.equal(applicationDates(data.applications[0]).length,0);
+ assert.match(careerDate("2027-01-03",new Date("2027-01-01T12:00")),/2/);
+ assert.equal(careerTaskId("skills","sql"," Practice SQL "),careerTaskId("skills","sql","practice sql"));
+ assert.notEqual(careerTaskId("skills","sql","practice sql"),careerTaskId("skills","sql","practice joins"));
+});
+
+test("linked task IDs fit cloud storage for long Unicode practice notes", () => { assert.ok(mod.exports.careerTaskId("skills", "skill-1", "\u0e01".repeat(2000)).length < 200); });

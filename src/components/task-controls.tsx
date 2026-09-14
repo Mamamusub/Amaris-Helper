@@ -41,7 +41,7 @@ export function canonicalTaskTitle(title: string) {
     .trim();
 }
 
-export function TaskEditor({ task, tasks = [], onSave, onClose, recurringAction }: { task: Task; tasks?: Task[]; onSave: (task: Task, scope?: "this" | "future") => void; onClose: () => void; recurringAction?: ReactNode }) {
+export function TaskEditor({ task, tasks = [], onSave, onClose, recurringAction, onCareerOpen }: { task: Task; tasks?: Task[]; onSave: (task: Task, scope?: "this" | "future") => void; onClose: () => void; recurringAction?: ReactNode; onCareerOpen?: (section:string, id:string) => void }) {
   const [draft, setDraft] = useState(task);
   const [scope, setScope] = useState<"this" | "future">("future");
   const [addingSubject, setAddingSubject] = useState(false);
@@ -50,6 +50,7 @@ export function TaskEditor({ task, tasks = [], onSave, onClose, recurringAction 
   const titleOptions = Array.from(new Set(tasks.map((item) => canonicalTaskTitle(item.title)).filter(Boolean)));
   return <div className="workspace-overlay" role="dialog" aria-modal="true" aria-label="Edit task" onKeyDown={(event) => dialogKeyboard(event, onClose)}><form className="panel task-editor" onSubmit={(event) => { event.preventDefault(); if (draft.title.trim()) onSave({ ...draft, title: draft.title.trim(), ...(draft.repeat && scope === "future" && draft.deadline !== task.deadline ? { repeat: { ...draft.repeat, anchor: draft.deadline }, occurrenceDate: draft.deadline } : {}), subtasks: (draft.subtasks ?? []).filter((item) => item.title.trim()) }, scope); }}>
     <div className="panel-heading"><h3>Task details</h3><button type="button" className="close-button" onClick={onClose} aria-label="Close task editor">×</button></div>
+    {task.id.startsWith("career:") && onCareerOpen && <button type="button" className="secondary-button" onClick={() => { const [,section,id] = task.id.split(":"); onCareerOpen(section,id); }}>Open linked Career item</button>}
     {recurringAction && <div className="task-editor-recurring">{recurringAction}</div>}
     <label>Title<input autoFocus required list="task-title-options" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /><datalist id="task-title-options">{titleOptions.map((title) => <option key={title} value={title} />)}</datalist></label>
     <label>Task color<input className="task-color-input" type="color" value={draft.color ?? "#d7f36b"} onChange={(event) => setDraft({ ...draft, color: event.target.value })} /></label>

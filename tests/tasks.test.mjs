@@ -37,6 +37,7 @@ function harness() {
     const mod = { exports: {} };
     const stub = () => null;
     const importModule = (name) => {
+      if (name.endsWith(".css")) return { default: {} };
       if (name === "react") return react;
       if (name.endsWith("account-boundary")) return { default: ({ children }) => children, useCloud: () => null, useCloudSnapshot: () => null };
       if (/components\/(pipeline-view|integrations)/.test(name)) return { default: stub, AIStatus: stub, CalendarReturnNotice: stub, IntegrationSettings: stub, TaskIntegrations: stub };
@@ -47,7 +48,7 @@ function harness() {
       }
       return require(name);
     };
-    vm.runInNewContext(compiled, { module: mod, exports: mod.exports, require: importModule, window: { localStorage }, crypto: { randomUUID }, Date, Intl, setInterval, clearInterval, AbortSignal, console });
+    vm.runInNewContext(compiled, { module: mod, exports: mod.exports, require: importModule, window: { localStorage, confirm: () => true }, localStorage, document: {activeElement:{focus() {}}}, crypto: { randomUUID }, Date, Intl, URL, setInterval, clearInterval, AbortSignal, console });
     cache.set(file, mod.exports);
     return mod.exports;
   }
@@ -71,7 +72,7 @@ function harness() {
     return [...(predicate(node) ? [node] : []), ...findAll(predicate, node.children)];
   };
   const click = (label, node = tree) => { const button = findAll((n) => n.type === "button" && (text(n).trim() === label || (n.props.className?.includes("nav-item") && text(n).trim().endsWith(label))), node)[0]; assert.ok(button, `button ${label}`); button.props.onClick(); render(); };
-  const field = (label, value) => { const group = findAll((n) => n.type === "label" && text(n).startsWith(label))[0]; assert.ok(group, label); const input = findAll((n) => ["input", "textarea", "select"].includes(n.type), group)[0]; input.props.onChange({ target: { value, checked: value } }); render(); };
+  const field = (label, value) => { const group = findAll((n) => n.type === "label" && text(n).startsWith(label), findAll(n => n.type === "form").at(-1) ?? tree)[0]; assert.ok(group, label); const input = findAll((n) => ["input", "textarea", "select"].includes(n.type), group)[0]; input.props.onChange({ target: { value, checked: value } }); render(); };
   const save = () => { const form = findAll((n) => n.type === "form" && n.props.className === "panel task-editor")[0]; form.props.onSubmit({ preventDefault() {} }); render(); };
   return { failWrites() { failWrites = true; }, storage, load, render, click, field, save, findAll, text, refresh() { hooks.clear(); render(); } };
 }
@@ -93,7 +94,7 @@ test("Study Count shows subject history, selected-day tasks and previous months"
   h.findAll((n) => n.props["aria-label"] === "เดือนถัดไป")[0].props.onClick(); h.render();
   h.click("Reopen");
   assert.ok(h.text(count()).includes("ยังไม่มีประวัติ"));
-  h.click("Tasks1"); assert.equal(h.findAll((n) => n.props.className === "subject-count" || n.props.className === "panel task-counts").length, 0);
+  h.click("Task1"); assert.equal(h.findAll((n) => n.props.className === "subject-count" || n.props.className === "panel task-counts").length, 0);
 });
 
 test("shared task lifecycle across Study, Tasks, Calendar, Today and refresh", () => {
@@ -110,7 +111,7 @@ test("shared task lifecycle across Study, Tasks, Calendar, Today and refresh", (
   const id = read().find((task) => task.title === "Submit DS lab").id;
   assert.equal(read()[0].subjectId, "ds");
   assert.deepEqual(JSON.parse(h.storage.get("agent-helper.tasks.legacy-backup")), [original]);
-  h.click("Tasks2"); h.click("All Tasks2");
+  h.click("Task2"); h.click("All Tasks2");
   h.click("Edit"); h.field("Title", "Updated lab"); h.field("Priority", "High"); h.save();
   h.click("Calendar"); assert.ok(h.findAll((n) => n.type === "h4" && h.text(n) === "Updated lab").length === 1);
   h.click("Edit"); h.field("Description", "Updated from Calendar"); h.save();
@@ -118,10 +119,10 @@ test("shared task lifecycle across Study, Tasks, Calendar, Today and refresh", (
   h.click("☆ Focus"); h.click("Edit"); h.field("Due date", shiftDay(today, -1)); h.save();
   assert.equal(h.load("src/lib/task-model.ts").todayTasks(read(), today).length, 1);
   h.click("Complete"); assert.equal(h.load("src/lib/task-model.ts").todayTasks(read(), today).length, 0);
-  h.click("Tasks1"); h.click("All Tasks2"); h.click("Reopen"); h.click("Delete");
+  h.click("Task1"); h.click("All Tasks2"); h.click("Reopen"); h.click("Delete");
   assert.equal(read().find((task) => task.id === id).deletedAt != null, true);
   h.refresh(); h.click("Undo"); assert.equal(read().find((task) => task.id === id).deletedAt, undefined);
-  h.click("Tasks2"); h.click("All Tasks2"); h.click("Edit"); h.field("Due date", ""); h.save();
+  h.click("Task2"); h.click("All Tasks2"); h.click("Edit"); h.field("Due date", ""); h.save();
   h.click("Calendar"); assert.equal(h.findAll((n) => n.type === "h4" && h.text(n) === "Updated lab").length, 0);
   h.click("Today"); assert.equal(h.findAll((n) => n.type === "strong" && h.text(n) === "Updated lab").length, 1);
   h.click("Data Structures ↗"); assert.equal(h.findAll((n) => n.type === "strong" && h.text(n) === "Updated lab").length, 1);
@@ -157,7 +158,7 @@ test("imported calendar tasks never duplicate or resurrect after changes", () =>
 for (const view of ["Today", "Tasks", "Calendar", "Study"]) {
   test(`create, edit, complete, delete and Undo through ${view} controls`, () => {
     const h = harness(); h.storage.set("agent-helper.tasks", "[]"); h.storage.set("agent-helper.subjects", "[]"); h.render();
-    if (view !== "Today") h.click(view === "Tasks" ? "Tasks0" : view);
+    if (view !== "Today") h.click(view === "Tasks" ? "Task0" : view);
     if (view === "Study") { h.findAll((n) => n.type === "input" && n.props["aria-label"] === "New subject name")[0].props.onChange({ target: { value: "New subject" } }); h.render(); h.findAll((n) => n.type === "form" && n.props.className === "add-subject")[0].props.onSubmit({ preventDefault() {} }); h.render(); h.findAll((n) => n.type === "button" && n.props.className === "subject-card")[0].props.onClick(); h.render(); }
     h.click(view === "Today" ? "+" : "+ New task"); h.field("Title", `${view} created`); h.save();
     if (view === "Tasks") h.click("All Tasks1");
@@ -196,9 +197,9 @@ test("Tasks opens This week and Focus uses the same deadline for imported and ma
   h.storage.set("agent-helper.tasks", JSON.stringify([{ ...base, id: "imported", title: "Calendar assignment", sourceEventId: "google-event", deadline: today }, { ...base, id: "manual", title: "Later assignment", deadline: shiftDay(today, 1) }]));
   h.storage.set("agent-helper.subjects", "[]"); h.render();
   assert.equal(h.findAll((n) => n.type === "h3" && h.text(n) === "Calendar assignment").length, 1);
-  h.click("Tasks2");
+  h.click("Task2");
   assert.ok(h.findAll((n) => n.props.className === "tab active" && h.text(n).startsWith("This week")).length);
-  h.click("Today"); h.click("Tasks2");
+  h.click("Today"); h.click("Task2");
   assert.ok(h.findAll((n) => n.props.className === "tab active" && h.text(n).startsWith("This week")).length);
 });
 
@@ -282,4 +283,29 @@ test("Focus navigation defaults to week, expands multiple subjects, paginates an
   assert.equal(h.findAll((n) => n.props.className === "focus-subject-toggle").length, 0);
   h.refresh(); h.click("Focus");
   assert.equal(JSON.parse(h.storage.get("agent-helper.tasks"))[0].focusSessions.length, 22);
+});
+
+test("Career forms persist, open read-first, link resumes and create only one task", () => {
+ const h=harness(); h.render(); h.click("Career"); h.click("Applications"); h.click("+ Add application");
+ h.field("Company","Internship test"); h.field("Position","Backend intern"); h.field("Next action","Prepare application"); h.field("Resume version","resume-0");
+ const submit = () => {h.findAll(n=>n.type === "form")[0].props.onSubmit({preventDefault(){}});h.render();};
+ submit(); h.click("Internship test"); assert.equal(h.findAll(n=>n.type === "form").length,0);
+ h.click("Edit application"); h.field("Application link","javascript:alert(1)"); submit(); assert.equal(h.findAll(n=>n.type === "form").length,1);
+ h.field("Application link","https://example.com/jobs"); submit(); h.click("Internship test");
+ h.click("Create practice / next action Task"); h.click("Create practice / next action Task");
+ const stored = JSON.parse(h.storage.get("agent-helper.tasks")); assert.equal(stored.filter(t=>t.title === "Prepare application").length,1);
+ h.refresh(); h.click("Career"); h.click("Applications"); h.click("Internship test"); h.click("Edit application");
+ assert.equal(h.findAll(n=>n.type === "select" && n.props.value === "resume-0", h.findAll(n=>n.type === "form")[0]).length,1);
+});
+
+test("Career project, resume, skill and interview detail edits survive reload", () => {
+ const h=harness();h.render();h.click("Career");
+ const submit=()=>{h.findAll(n=>n.type === "form")[0].props.onSubmit({preventDefault(){}});h.render();};
+ h.click("Portfolio");h.click("+ Add project");h.field("Project name","Hardware evidence");h.field("Demo / hardware video URL","https://example.com/video");h.field("Resume bullet","Built and tested a sensor");submit();
+ assert.equal(h.findAll(n=>n.props.role === "alert").map(h.text).join(""), ""); h.click("Hardware evidence");assert.ok(h.findAll(n=>n.type === "a" && n.props.href === "https://example.com/video").length);h.click("Edit project");h.field("Your contribution","Firmware");submit();
+ h.click("Resume");h.click("General");h.click("Edit resume");h.field("Document updated date","2026-09-10");h.field("Language","EN");submit();
+ h.click("Skills");h.click("SQL");h.click("Edit skill");h.field("What you can do independently","Write joins independently");h.field("Next practice","Practice subqueries");submit();
+ h.click("Interview");h.click("Behavioral questions");h.click("Edit interview topic");h.field("STAR", "A team project");submit();
+ h.refresh();h.click("Career");h.click("Portfolio");h.click("Hardware evidence");h.click("Edit project");assert.ok(h.findAll(n=>n.type === "textarea" && n.props.value === "Firmware").length);
+ const resume=JSON.parse(h.storage.get("amaris.career.resume"));assert.equal(resume[0].documentUpdatedAt,"2026-09-10");assert.equal(resume[0].id,"resume-0");
 });

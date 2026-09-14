@@ -7,3 +7,14 @@
 .page progress::-webkit-progress-value { background:#879f58; border-radius:8px; }
 .page progress::-moz-progress-bar { background:#879f58; border-radius:8px; }
 @media(max-width:650px) { .hero { padding:20px; }.hero h2 { font-size:26px; }.cards,.interview,.application { grid-template-columns:1fr; }.tabs button { padding:10px 12px; }.application { gap:12px; }.application>div:last-child { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }.cardHeading { flex-wrap:wrap; }.dialog { padding:20px; }.overlay { padding:12px; }.page :global(.panel-heading) { flex-wrap:wrap; gap:12px; }.filter { flex-wrap:wrap; } }
+.overlay { justify-content:flex-end; padding:0; }
+.dialog { width:min(620px,100%); height:100dvh; max-height:100dvh; border-radius:18px 0 0 18px; }
+.detail { display:grid; gap:20px; overflow-wrap:anywhere; }
+.detail p { white-space:pre-wrap; line-height:1.7; font-size:13px; }
+.detail details>div { margin-top:18px; }
+.detail button { justify-self:start; }
+.page summary { cursor:pointer; padding:10px 0; font-size:13px; }
+.page .check button[aria-pressed=true] { background:#e1e9cf; border-color:#7b9359; }
+.readiness label { display:flex; gap:8px; align-items:center; }
+.readiness fieldset { border:1px solid #d6dfc2; margin-top:12px; }
+@media(max-width:650px) { .overlay { padding:0; }.dialog { width:100%; max-width:100%; border-radius:0; padding:18px; }.hero { padding:16px; gap:10px; }.hero h2 { font-size:23px; margin:6px 0; }.readiness>strong { font-size:30px; }.page .tabs { flex-wrap:nowrap; overflow-x:auto; }.tabs button { flex-shrink:0; padding:10px; }.page { min-width:0; } }

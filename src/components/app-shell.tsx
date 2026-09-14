@@ -62,6 +62,7 @@ export default function AppShell() {
 function LoadedAppShell() {
   const cloud = useCloud();
   const synced = useCloudSnapshot();
+  const [careerTarget, setCareerTarget] = useState<{section:string; id:string} | null>(null);
   const [view, setView] = useState<View>("dashboard");
   const [calendarId, setCalendarId] = useState("");
   const [localTasks, setTasks] = useState<Task[]>(() => cloud ? [] : migrateTasks(readStorage(storageKeys.tasks, demoTasks), readStorage(storageKeys.subjects, demoSubjects)));
@@ -182,7 +183,7 @@ function LoadedAppShell() {
       {view === "focus" && <FocusDashboard tasks={storedTasks} subjects={subjects} session={activeFocus} loading={synced?.status === "กำลังโหลด" && !storedTasks.length} error={synced?.error || saveError} retry={() => { if (cloud) void cloud.sync(true); else { setTasks(readStorage(storageKeys.tasks, localTasks)); setSaveError(""); } }} chooseTasks={() => setView("tasks")} />}
       {view === "tasks" && <TaskTimelineView tasks={tasks} />}
       {view === "study" && <StudyAssignmentsView subjects={subjects} setSubjects={commitSubjects} tasks={tasks} onOpenAgent={openAgent} selectedSubjectId={subjectId} />}
-      {view === "career" && <CareerView tasks={storedTasks} onCreateTask={() => { const now = new Date().toISOString(); setEditorVersion(0); setEditor({ id: crypto.randomUUID(), title: "", description: "", team: "Career", assignedAgent: "secretary", status: "Planned", priority: "Medium", deadline: "", focused: true, createdAt: now, updatedAt: now }); }}><div className="agent-cards wide">{agents.filter((agent) => agent.team === "Career").map((agent) => <AgentCard key={agent.id} agent={agent} onClick={() => openAgent(agent)} />)}</div></CareerView>}
+      {view === "career" && <CareerView target={careerTarget} onAddTask={(task) => storedTasks.some(item => item.id === task.id) || commitTasks([task, ...storedTasks])} tasks={storedTasks} onCreateTask={() => { const now = new Date().toISOString(); setEditorVersion(0); setEditor({ id: crypto.randomUUID(), title: "", description: "", team: "Career", assignedAgent: "secretary", status: "Planned", priority: "Medium", deadline: "", focused: true, createdAt: now, updatedAt: now }); }}><div className="agent-cards wide">{agents.filter((agent) => agent.team === "Career").map((agent) => <AgentCard key={agent.id} agent={agent} onClick={() => openAgent(agent)} />)}</div></CareerView>}
       {view === "development" && <TeamView team="Development" onOpenAgent={openAgent} />}
       {view === "calendar" && <DeadlineCalendar selectedCalendarId={calendarId} onCalendarSelected={setCalendarId} tasks={storedTasks} subjects={subjects} onCreateTask={addTask} onAssignAll={assignCalendarEvents} onSettings={() => setView("settings")} />}
       {view === "port" && <PortView />}
@@ -190,7 +191,7 @@ function LoadedAppShell() {
       {view === "settings" && <SettingsView />}
     </main>
     {selectedAgent && <AgentWorkspaceV3 agent={selectedAgent} messages={messages[selectedAgent.id] ?? []} setMessages={setMessages} onClose={() => setSelectedAgent(null)} onCreateTask={(task) => addTask({ ...task, subjectId: subjects.some((subject) => subject.id === selectedAgent.id) ? selectedAgent.id : task.subjectId })} onRoute={routeRequest} />}
-    {editor && <TaskEditor tasks={storedTasks} recurringAction={!storedTasks.some((task) => task.id === editor.id) ? <GoLessonButton tasks={storedTasks} save={saveGoLessonTasks} /> : undefined} key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task, scope) => {
+    {editor && <TaskEditor onCareerOpen={(section, id) => { setEditor(null); setCareerTarget({section,id}); setView("career"); }} tasks={storedTasks} recurringAction={!storedTasks.some((task) => task.id === editor.id) ? <GoLessonButton tasks={storedTasks} save={saveGoLessonTasks} /> : undefined} key={editor.id} task={editor} onClose={() => setEditor(null)} onSave={(task, scope) => {
       const subject = task.subjectId ? subjects.find((item) => item.id === task.subjectId) : undefined;
       const taskWithFocusSubject = subject && task.focusSessions ? { ...task, focusSessions: task.focusSessions.map((record) => record.snapshot?.subjectId === null ? { ...record, snapshot: { ...record.snapshot, subjectId: subject.id, subjectName: subject.name, subjectColor: subject.color } } : record) } : task;
       const next = editRecurring(storedTasks, taskWithFocusSubject, scope);
