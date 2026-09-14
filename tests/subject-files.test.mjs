@@ -12,6 +12,7 @@ const compiled = ts.transpileModule(fs.readFileSync("src/lib/subject-files.ts", 
 vm.runInThisContext(`(function(module, exports, require) { ${compiled}\n})`)(mod, mod.exports, require);
 const { fileKind, fileAsPdf } = mod.exports;
 const { listSubjectFiles, saveSubjectFiles } = mod.exports;
+const { listSubjectFolders, createSubjectFolder } = mod.exports;
 const png = new Blob([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")]);
 test("file import identifies actual content and rejects unsupported files", async () => {
   assert.equal(await fileKind(png), "png");
@@ -48,4 +49,23 @@ test("IndexedDB retains files in separate subjects and accounts and renames with
   assert.equal(reloaded.find((f) => f.id === "a").name, "Chapter 2");
   assert.deepEqual(new Uint8Array(await reloaded.find((f) => f.id === "a").blob.arrayBuffer()), new Uint8Array(await png.arrayBuffer()));
   assert.equal((await listSubjectFiles("account-b"))[0].name, "Notes");
+});
+test("subfolders persist nested paths, isolate accounts and subjects, and reject duplicate or invalid parents", async () => {
+  const base = { scope: "folders-test", subjectId: "math", subjectName: "Math", parentId: null, name: "Chapter 1", createdAt: new Date().toISOString() };
+  await createSubjectFolder({ ...base, id: "folder-root" });
+  await createSubjectFolder({ ...base, id: "folder-child", parentId: "folder-root", name: "Exercises" });
+  await assert.rejects(createSubjectFolder({ ...base, id: "duplicate", name: " chapter 1 " }), /มีโฟลเดอร์/);
+  await assert.rejects(createSubjectFolder({ ...base, id: "invalid", parentId: "missing" }), /ไม่พบ/);
+  await assert.rejects(createSubjectFolder({ ...base, id: "foreign", scope: "other", parentId: "folder-root" }), /ไม่พบ/);
+  await assert.rejects(createSubjectFolder({ ...base, id: "foreign-subject", subjectId: "physics", parentId: "folder-root" }), /ไม่พบ/);
+  await createSubjectFolder({ ...base, id: "physics-folder", subjectId: "physics" });
+  const directories = await listSubjectFolders(base.scope);
+  assert.equal(directories.length, 3);
+  assert.equal(directories.find((f) => f.id === "folder-child").parentId, "folder-root");
+  assert.equal((await listSubjectFolders("other")).length, 0);
+  const file = { id: "nested-file", scope: base.scope, subjectId: "math", subjectName: "Math", folderId: "folder-child", name: "Exercise", kind: "png", size: png.size, createdAt: base.createdAt, blob: png };
+  await saveSubjectFiles([file, { ...file, id: "legacy-file", folderId: undefined }]);
+  const reloaded = await listSubjectFiles(base.scope);
+  assert.equal(reloaded.find((f) => f.id === file.id).folderId, "folder-child");
+  assert.equal(reloaded.find((f) => f.id === "legacy-file").folderId ?? null, null);
 });

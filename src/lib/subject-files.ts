@@ -1,13 +1,44 @@
-export type SubjectFile = { id: string; scope: string; subjectId: string; subjectName: string; name: string; kind: "pdf" | "png"; size: number; createdAt: string; blob: Blob };
+export type SubjectFile = { id: string; scope: string; subjectId: string; subjectName: string; folderId?: string | null; name: string; kind: "pdf" | "png"; size: number; createdAt: string; blob: Blob };
+export type SubjectFolder = { id: string; scope: string; subjectId: string; subjectName: string; parentId: string | null; name: string; createdAt: string };
 
 async function database() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open("amaris-subject-files", 1);
-    request.onupgradeneeded = () => { request.result.createObjectStore("files", { keyPath: "id" }).createIndex("scope", "scope"); };
-    request.onsuccess = () => resolve(request.result);
+    const request = indexedDB.open("amaris-subject-files", 2);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains("files")) request.result.createObjectStore("files", { keyPath: "id" }).createIndex("scope", "scope");
+      if (!request.result.objectStoreNames.contains("folders")) request.result.createObjectStore("folders", { keyPath: "id" }).createIndex("scope", "scope");
+    };
+    request.onsuccess = () => { request.result.onversionchange = () => request.result.close(); resolve(request.result); };
     request.onerror = () => reject(new Error("เปิดพื้นที่เก็บไฟล์ไม่ได้ กรุณาตรวจการตั้งค่าเบราว์เซอร์"));
     request.onblocked = () => reject(new Error("กรุณาปิดแท็บอื่นของแอปแล้วลองใหม่"));
   });
+}
+export async function listSubjectFolders(scope: string): Promise<SubjectFolder[]> {
+  const db = await database();
+  try { return await new Promise((resolve, reject) => {
+    const tx = db.transaction("folders", "readonly");
+    const request = tx.objectStore("folders").index("scope").getAll(scope);
+    tx.oncomplete = () => resolve(request.result as SubjectFolder[]);
+    tx.onabort = tx.onerror = () => reject(new Error("โหลดโฟลเดอร์ไม่สำเร็จ"));
+  }); } finally { db.close(); }
+}
+export async function createSubjectFolder(folder: SubjectFolder) {
+  const name = folder.name.trim();
+  if (!name || name.length > 100) throw new Error("กรุณาตั้งชื่อโฟลเดอร์ 1–100 ตัวอักษร");
+  const db = await database();
+  try { await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("folders", "readwrite"), store = tx.objectStore("folders");
+    let message = "สร้างโฟลเดอร์ไม่สำเร็จ";
+    const request = store.index("scope").getAll(folder.scope);
+    request.onsuccess = () => {
+      const folders = request.result as SubjectFolder[];
+      if (folder.parentId && !folders.some((f) => f.id === folder.parentId && f.subjectId === folder.subjectId)) { message = "ไม่พบโฟลเดอร์หลัก"; tx.abort(); return; }
+      if (folders.some((f) => f.subjectId === folder.subjectId && f.parentId === folder.parentId && f.name.toLocaleLowerCase() === name.toLocaleLowerCase())) { message = "มีโฟลเดอร์ชื่อนี้อยู่แล้ว"; tx.abort(); return; }
+      store.add({ ...folder, name });
+    };
+    tx.oncomplete = () => resolve();
+    tx.onabort = tx.onerror = () => reject(new Error(message));
+  }); } finally { db.close(); }
 }
 export async function listSubjectFiles(scope: string): Promise<SubjectFile[]> {
   const db = await database();
