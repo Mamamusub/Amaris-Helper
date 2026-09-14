@@ -50,13 +50,14 @@ export default function FocusMode({ taskId, tasks, subjects = [], accountKey, op
   }, [session, tasks]);
   const task = tasks.find((item) => item.id === taskId);
   const activeTask = tasks.find((item) => item.id === session?.taskId);
+  const activeSubject = subjects.find((subject) => subject.id === activeTask?.subjectId);
   const current = session && session.taskId === taskId ? session : null;
   const total = tasks.flatMap((item) => item.focusSessions ?? []).reduce((sum, item) => sum + (item.intervals ? focusedToday(item.intervals, dayKey(new Date(now))) : dayKey(new Date(item.endedAt)) === dayKey(new Date(now)) ? item.elapsedMs : 0), 0);
   const isSaved = !session?.endedAt || !!activeTask?.focusSessions?.some((item) => item.id === session.id);
   const clear = () => { if (isSaved) void mutate(() => null); };
-  if (!task) return <>{error && <div className="notice" role="alert">{error}</div>}{session && <button className="focus-mini" onClick={() => open(session.taskId)}><span>{session.endedAt ? "✓ จบรอบแล้ว" : session.runningSince === null ? "Ⅱ หยุดพัก" : "◷ กำลังโฟกัส"}</span><strong>{activeTask?.title ?? "งานที่เลือก"}</strong><b>{formatTime(session.durationMs - elapsed(session, now))}</b></button>}</>;
+  if (!task) return <>{error && <div className="notice" role="alert">{error}</div>}{session && <button type="button" className="focus-mini" aria-label="เปิดหน้าต่าง Focus" onClick={() => open(session.taskId)}><span className="focus-mini-status">{session.endedAt ? "✓ จบรอบแล้ว" : session.runningSince === null ? "Ⅱ หยุดพัก" : "◷ กำลังโฟกัส"}</span><strong title={activeSubject?.name ?? "ไม่ได้ระบุวิชา"}>{activeSubject?.name ?? "ไม่ได้ระบุวิชา"}</strong><span className="focus-mini-task" title={activeTask?.title}>{activeTask?.title ?? "งานที่เลือก"}</span><b role="timer" aria-label="เวลาที่เหลือ">{formatTime(session.durationMs - elapsed(session, now))}</b><span className="focus-mini-footer">{session.endedAt ? "ดูสรุปรอบนี้" : "เปิดหน้าจับเวลา"} <span aria-hidden="true">↗</span></span></button>}</>;
   return <div className="workspace-overlay focus-overlay" role="dialog" aria-modal="true" aria-label="โฟกัสกับงาน" onKeyDown={(event) => dialogKeyboard(event, close)}><section className="focus-panel">
-    <div className="panel-heading"><span className="eyebrow">FOCUS · วันนี้ {formatTime(total)}</span><button autoFocus className="close-button" aria-label="ย่อหน้าต่างโฟกัส" onClick={close}>×</button></div>
+    <div className="panel-heading"><span className="eyebrow">FOCUS · วันนี้ {formatTime(total)}</span><button autoFocus className="secondary-button" aria-label="ย่อหน้าต่างโฟกัส" title="ย่อหน้าต่างโดยไม่หยุดเวลา (Esc)" onClick={close}>− ย่อหน้าต่าง</button></div>
     <h2>{task.title}</h2><p className="muted">ทีละขั้นตอน ให้เวลากับงานตรงหน้า</p>
     {error && <p role="alert">{error} <button className="secondary-button" onClick={() => void mutate((value) => value)}>ลองใหม่</button></p>}
     {session && !current ? <div className="empty-state"><p>มีรอบของ “{activeTask?.title}” อยู่แล้ว</p><button className="primary-button" onClick={() => open(session.taskId)}>กลับไปรอบเดิม</button></div> : <>

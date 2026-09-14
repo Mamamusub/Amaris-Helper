@@ -96,6 +96,26 @@ test("Study subject focus opens a linked timer, reuses its task after reload, an
   assert.ok(h.text(h.render()).includes("Could not save tasks"));
 });
 
+test("Minimized Focus displays its subject and timer and reopens without replacing the session", () => {
+  const h = harness();
+  h.storage.set("agent-helper.subjects", JSON.stringify([{ id: "math", name: "Math", context: "", color: "#abc", nextEvent: "" }]));
+  h.storage.set("agent-helper.tasks", JSON.stringify([{ id: "review", title: "Review chapter 1", subjectId: "math", team: "Study", assignedAgent: "math", status: "Planned", priority: "Medium", deadline: "", createdAt: "old", updatedAt: "old" }]));
+  const session = JSON.stringify({ id: "session-1", taskId: "review", startedAt: Date.now(), runningSince: null, elapsedMs: 60000, durationMs: 1500000, note: "" });
+  h.storage.set("agent-helper.focus-session", session);
+  h.render();
+  const mini = () => h.findAll((n) => n.props.className === "focus-mini")[0];
+  assert.ok(h.text(mini()).includes("Math"));
+  assert.ok(h.text(mini()).includes("Review chapter 1"));
+  assert.ok(h.text(mini()).includes("24:00"));
+  mini().props.onClick(); h.render();
+  assert.equal(mini(), undefined);
+  assert.ok(h.findAll((n) => n.props.className === "focus-panel").length);
+  h.click("− ย่อหน้าต่าง");
+  assert.ok(mini());
+  h.click("Study"); assert.ok(mini());
+  assert.equal(h.storage.get("agent-helper.focus-session"), session);
+});
+
 test("Study Count shows subject history, selected-day tasks and previous months", () => {
   const h = harness();
   const month = h.load("src/lib/calendar.ts").dayKey(new Date()).slice(0, 7);
