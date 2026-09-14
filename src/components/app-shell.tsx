@@ -2,6 +2,7 @@
 
 import { FormEvent, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import BuildLab from "./build-lab";
+import StorageView from "./storage-view";
 import PipelineView from "@/components/pipeline-view";
 import { usePipeline } from "@/components/use-pipeline";
 import DeadlineCalendar from "@/components/deadline-calendar";
@@ -34,7 +35,7 @@ import SubjectCount from "@/components/subject-count";
 
 import RecurringTasks, { GoLessonButton } from "@/components/recurring-tasks";
 
-type View = "semester" | "focus" | "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "exam"| "career" | "finance" | "development" | "port" | "settings";
+type View = "storage" | "semester" | "focus" | "calendar" | "dashboard" | "teams" | "pipeline" | "tasks" | "study" | "exam"| "career" | "finance" | "development" | "port" | "settings";
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "Today", icon: "⌂" },
   { id: "teams", label: "Team Grid", icon: "◈" },
@@ -45,6 +46,7 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "exam", label: "Exam", icon: "◎" },
   { id: "semester", label: "Semester", icon: "?" },
   { id: "study", label: "Study", icon: "✦" },
+  { id: "storage", label: "Storage", icon: "▱" },
   { id: "career", label: "Career", icon: "↗" },
   { id: "finance", label: "Income and expenses", icon: "฿" },
   { id: "port", label: "Investment", icon: "⇄" },
@@ -203,6 +205,7 @@ function LoadedAppShell() {
       {view === "study" && <StudyAssignmentsView subjects={subjects} setSubjects={commitSubjects} tasks={tasks} onOpenAgent={openAgent} selectedSubjectId={subjectId} onFocusSubject={focusSubject} />}
       {view === "career" && <CareerView target={careerTarget} onAddTask={(task) => storedTasks.some(item => item.id === task.id) || commitTasks([task, ...storedTasks])} tasks={storedTasks} onCreateTask={() => { const now = new Date().toISOString(); setEditorVersion(0); setEditor({ id: crypto.randomUUID(), title: "", description: "", team: "Career", assignedAgent: "secretary", status: "Planned", priority: "Medium", deadline: "", focused: true, createdAt: now, updatedAt: now }); }}><div className="agent-cards wide">{agents.filter((agent) => agent.team === "Career").map((agent) => <AgentCard key={agent.id} agent={agent} onClick={() => openAgent(agent)} />)}</div></CareerView>}
       {view === "development" && <BuildLab />}
+      {view === "storage" && <StorageView key={cloud?.key ?? "local"} scope={cloud?.key ?? "local"} subjects={subjects} />}
       {view === "calendar" && <DeadlineCalendar selectedCalendarId={calendarId} onCalendarSelected={setCalendarId} tasks={storedTasks} subjects={subjects} onCreateTask={addTask} onAssignAll={assignCalendarEvents} onSettings={() => setView("settings")} />}
       {view === "port" && <PortView />}
       {view === "finance" && <FinanceView />}

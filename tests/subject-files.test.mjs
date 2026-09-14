@@ -1,0 +1,51 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import vm from "node:vm";
+import { createRequire } from "node:module";
+import ts from "typescript";
+import { PDFDocument } from "pdf-lib";
+import "fake-indexeddb/auto";
+const require = createRequire(import.meta.url);
+const mod = { exports: {} };
+const compiled = ts.transpileModule(fs.readFileSync("src/lib/subject-files.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+vm.runInThisContext(`(function(module, exports, require) { ${compiled}\n})`)(mod, mod.exports, require);
+const { fileKind, fileAsPdf } = mod.exports;
+const { listSubjectFiles, saveSubjectFiles } = mod.exports;
+const png = new Blob([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")]);
+test("file import identifies actual content and rejects unsupported files", async () => {
+  assert.equal(await fileKind(png), "png");
+  assert.equal(await fileKind(new Blob(["%PDF-1.7\n"])), "pdf");
+  await assert.rejects(fileKind(new Blob(["not a PDF"], { type: "application/pdf" })));
+  await assert.rejects(fileKind(new Blob([])));
+});
+test("PDF export preserves the complete original document byte for byte", async () => {
+  const original = await PDFDocument.create(); original.addPage(); original.addPage();
+  const blob = new Blob([await original.save()]);
+  const result = await fileAsPdf({ kind: "pdf", blob });
+  assert.deepEqual(new Uint8Array(await result.arrayBuffer()), new Uint8Array(await blob.arrayBuffer()));
+  assert.equal((await PDFDocument.load(await result.arrayBuffer())).getPageCount(), 2);
+});
+test("PNG export produces a readable A4 PDF with an embedded image", async () => {
+  const result = await fileAsPdf({ kind: "png", blob: png });
+  assert.equal(result.type, "application/pdf");
+  const doc = await PDFDocument.load(await result.arrayBuffer());
+  assert.equal(doc.getPageCount(), 1);
+  assert.deepEqual(doc.getPage(0).getSize(), { width: 595.28, height: 841.89 });
+  assert.ok(doc.getPage(0).node.Resources().get(require("pdf-lib").PDFName.of("XObject")));
+  await assert.rejects(fileAsPdf({ kind: "png", blob: new Blob(["broken"]) }));
+});
+test("IndexedDB retains files in separate subjects and accounts and renames without changing their bytes", async () => {
+  const base = { scope: "account-a", subjectId: "math", subjectName: "Math", name: "Notes", kind: "png", size: png.size, createdAt: new Date().toISOString(), blob: png };
+  await saveSubjectFiles([{ ...base, id: "a" }, { ...base, id: "b", subjectId: "physics" }, { ...base, id: "c", scope: "account-b" }]);
+  const first = await listSubjectFiles("account-a");
+  assert.deepEqual(first.map((f) => f.subjectId).sort(), ["math", "physics"]);
+  assert.equal((await listSubjectFiles("account-b")).length, 1);
+  const file = first.find((f) => f.id === "a");
+  await saveSubjectFiles([{ ...file, name: "Chapter 2" }]);
+  const reloaded = await listSubjectFiles("account-a");
+  assert.equal(reloaded.length, 2);
+  assert.equal(reloaded.find((f) => f.id === "a").name, "Chapter 2");
+  assert.deepEqual(new Uint8Array(await reloaded.find((f) => f.id === "a").blob.arrayBuffer()), new Uint8Array(await png.arrayBuffer()));
+  assert.equal((await listSubjectFiles("account-b"))[0].name, "Notes");
+});
