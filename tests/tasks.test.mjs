@@ -77,6 +77,25 @@ function harness() {
   return { failWrites() { failWrites = true; }, storage, load, render, click, field, save, findAll, text, refresh() { hooks.clear(); render(); } };
 }
 
+test("Study subject focus opens a linked timer, reuses its task after reload, and handles failed storage", () => {
+  const h = harness();
+  h.storage.set("agent-helper.subjects", JSON.stringify([{ id: "math", name: "Math", context: "", color: "#abc", nextEvent: "" }]));
+  h.storage.set("agent-helper.tasks", "[]");
+  const openSubject = () => { h.click("Study"); h.findAll((n) => n.props.className === "subject-card")[0].props.onClick(); h.render(); };
+  h.render(); openSubject(); h.click("◷ Focus วิชานี้");
+  let saved = JSON.parse(h.storage.get("agent-helper.tasks"));
+  assert.equal(saved.length, 1); assert.equal(saved[0].subjectId, "math");
+  assert.ok(h.text(h.findAll((n) => n.props.className === "focus-panel")[0]).includes("ทบทวน Math"));
+  assert.ok(h.findAll((n) => n.type === "button" && h.text(n) === "เริ่มโฟกัส").length);
+  h.refresh(); openSubject(); h.click("◷ Focus วิชานี้");
+  assert.equal(JSON.parse(h.storage.get("agent-helper.tasks")).length, 1);
+  saved[0].status = "Done"; h.storage.set("agent-helper.tasks", JSON.stringify(saved));
+  h.refresh(); openSubject(); h.failWrites(); h.click("◷ Focus วิชานี้");
+  assert.equal(h.findAll((n) => n.props.className === "focus-panel").length, 0);
+  assert.equal(JSON.parse(h.storage.get("agent-helper.tasks")).length, 1);
+  assert.ok(h.text(h.render()).includes("Could not save tasks"));
+});
+
 test("Study Count shows subject history, selected-day tasks and previous months", () => {
   const h = harness();
   const month = h.load("src/lib/calendar.ts").dayKey(new Date()).slice(0, 7);
