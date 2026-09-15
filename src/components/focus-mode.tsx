@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { snapshotFocus } from "@/lib/focus-history";
 import type { Subject, Task } from "@/lib/types";
 import { timerComplete, timerDisplay, finish, formatTime, focusedToday, pause, type FocusSession } from "@/lib/focus-timer";
-import { dayKey } from "@/lib/calendar";
+import { calendarTimeZone, dayKey } from "@/lib/calendar";
 import { Subtasks } from "./task-extras";
 import { dialogKeyboard } from "./dialog-keyboard";
 
@@ -70,6 +70,6 @@ export default function FocusMode({ taskId, tasks, subjects = [], accountKey, op
     </>}
     <Subtasks items={task.subtasks} onChange={(subtasks) => save(task.id, { subtasks })} />
     {!!task.subtasks?.length && task.subtasks.every((item) => item.done) && task.status !== "Done" && <button className="secondary-button" onClick={() => save(task.id, { status: "Done" })}>งานย่อยครบแล้ว · ปิดงานหลัก</button>}
-    <details className="focus-history"><summary>ประวัติโฟกัส · {task.focusSessions?.length ?? 0} รอบ</summary>{!task.focusSessions?.length && <p className="muted">จบรอบแรกเพื่อเริ่มเก็บเวลา</p>}{task.focusSessions?.slice().reverse().map((item) => <div key={item.id}><strong>{formatTime(item.elapsedMs)}</strong> · {new Date(item.endedAt).toLocaleString("th-TH")}<p>{item.note}</p></div>)}</details>
+    <details className="focus-history"><summary>ประวัติโฟกัส · {task.focusSessions?.length ?? 0} รอบ</summary>{!task.focusSessions?.length && <p className="muted">จบรอบแรกเพื่อเริ่มเก็บเวลา</p>}{task.focusSessions?.slice().reverse().map((item) => <div key={item.id}><strong>{formatTime(item.elapsedMs)}</strong> · {new Date(item.endedAt).toLocaleString("th-TH", { timeZone: calendarTimeZone, hourCycle: "h23" })}<p>{item.note}</p></div>)}</details>
   </section></div>;
 }
