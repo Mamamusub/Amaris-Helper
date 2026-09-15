@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { snapshotFocus } from "@/lib/focus-history";
 import type { Subject, Task } from "@/lib/types";
-import { elapsed, finish, formatTime, focusedToday, pause, type FocusSession } from "@/lib/focus-timer";
+import { timerComplete, timerDisplay, finish, formatTime, focusedToday, pause, type FocusSession } from "@/lib/focus-timer";
 import { dayKey } from "@/lib/calendar";
 import { Subtasks } from "./task-extras";
 import { dialogKeyboard } from "./dialog-keyboard";
@@ -18,6 +18,7 @@ export default function FocusMode({ taskId, tasks, subjects = [], accountKey, op
   }, [session, onSessionChange]);
   const [now, setNow] = useState(() => Date.now());
   const [minutes, setMinutes] = useState(25);
+  const [mode, setMode] = useState<"countdown" | "stopwatch">("countdown");
   const [error, setError] = useState("");
   const latest = useRef({ tasks, subjects, save });
   useEffect(() => { latest.current = { tasks, subjects, save }; }, [tasks, subjects, save]);
@@ -36,10 +37,10 @@ export default function FocusMode({ taskId, tasks, subjects = [], accountKey, op
     return () => { clearInterval(timer); window.removeEventListener("storage", refresh); window.removeEventListener("focus", refresh); };
   }, [key]);
   useEffect(() => {
-    if (!session || session.endedAt || session.runningSince === null || elapsed(session, now) < session.durationMs) return;
+    if (!session || session.endedAt || session.runningSince === null || !timerComplete(session, now)) return;
     void navigator.locks?.request(key, () => {
       const raw = localStorage.getItem(key); const current: FocusSession | null = raw ? JSON.parse(raw) : null;
-      if (current && !current.endedAt && elapsed(current, Date.now()) >= current.durationMs) { const ended = finish(current, Date.now()); localStorage.setItem(key, JSON.stringify(ended)); setSession(ended); }
+      if (current && !current.endedAt && timerComplete(current, Date.now())) { const ended = finish(current, Date.now()); localStorage.setItem(key, JSON.stringify(ended)); setSession(ended); }
     }).catch(() => setError("บันทึกเวลาจบไม่สำเร็จ กดจบรอบเพื่อลองใหม่"));
   }, [session, now, key]);
   useEffect(() => {
@@ -55,16 +56,16 @@ export default function FocusMode({ taskId, tasks, subjects = [], accountKey, op
   const total = tasks.flatMap((item) => item.focusSessions ?? []).reduce((sum, item) => sum + (item.intervals ? focusedToday(item.intervals, dayKey(new Date(now))) : dayKey(new Date(item.endedAt)) === dayKey(new Date(now)) ? item.elapsedMs : 0), 0);
   const isSaved = !session?.endedAt || !!activeTask?.focusSessions?.some((item) => item.id === session.id);
   const clear = () => { if (isSaved) void mutate(() => null); };
-  if (!task) return <>{error && <div className="notice" role="alert">{error}</div>}{session && <button type="button" className="focus-mini" aria-label="เปิดหน้าต่าง Focus" onClick={() => open(session.taskId)}><span className="focus-mini-status">{session.endedAt ? "✓ จบรอบแล้ว" : session.runningSince === null ? "Ⅱ หยุดพัก" : "◷ กำลังโฟกัส"}</span><strong title={activeSubject?.name ?? "ไม่ได้ระบุวิชา"}>{activeSubject?.name ?? "ไม่ได้ระบุวิชา"}</strong><span className="focus-mini-task" title={activeTask?.title}>{activeTask?.title ?? "งานที่เลือก"}</span><b role="timer" aria-label="เวลาที่เหลือ">{formatTime(session.durationMs - elapsed(session, now))}</b><span className="focus-mini-footer">{session.endedAt ? "ดูสรุปรอบนี้" : "เปิดหน้าจับเวลา"} <span aria-hidden="true">↗</span></span></button>}</>;
+  if (!task) return <>{error && <div className="notice" role="alert">{error}</div>}{session && <button type="button" className="focus-mini" aria-label="เปิดหน้าต่าง Focus" onClick={() => open(session.taskId)}><span className="focus-mini-status">{session.endedAt ? "✓ จบรอบแล้ว" : session.runningSince === null ? "Ⅱ หยุดพัก" : "◷ กำลังโฟกัส"}</span><strong title={activeSubject?.name ?? "ไม่ได้ระบุวิชา"}>{activeSubject?.name ?? "ไม่ได้ระบุวิชา"}</strong><span className="focus-mini-task" title={activeTask?.title}>{activeTask?.title ?? "งานที่เลือก"}</span><b role="timer" aria-label={session.mode === "stopwatch" ? "เวลาที่จับได้" : "เวลาที่เหลือ"}>{timerDisplay(session, now)}</b><span className="focus-mini-footer">{session.endedAt ? "ดูสรุปรอบนี้" : "เปิดหน้าจับเวลา"} <span aria-hidden="true">↗</span></span></button>}</>;
   return <div className="workspace-overlay focus-overlay" role="dialog" aria-modal="true" aria-label="โฟกัสกับงาน" onKeyDown={(event) => dialogKeyboard(event, close)}><section className="focus-panel">
     <div className="panel-heading"><span className="eyebrow">FOCUS · วันนี้ {formatTime(total)}</span><button autoFocus className="secondary-button" aria-label="ย่อหน้าต่างโฟกัส" title="ย่อหน้าต่างโดยไม่หยุดเวลา (Esc)" onClick={close}>− ย่อหน้าต่าง</button></div>
     <h2>{task.title}</h2><p className="muted">ทีละขั้นตอน ให้เวลากับงานตรงหน้า</p>
     {error && <p role="alert">{error} <button className="secondary-button" onClick={() => void mutate((value) => value)}>ลองใหม่</button></p>}
     {session && !current ? <div className="empty-state"><p>มีรอบของ “{activeTask?.title}” อยู่แล้ว</p><button className="primary-button" onClick={() => open(session.taskId)}>กลับไปรอบเดิม</button></div> : <>
-      <div className="focus-clock" role="timer" aria-label="เวลาที่เหลือ">{formatTime(current ? current.durationMs - elapsed(current, now) : minutes * 60000)}</div>
+      <div className="focus-clock" role="timer" aria-label={(current?.mode ?? mode) === "stopwatch" ? "เวลาที่จับได้" : "เวลาที่เหลือ"}>{current ? timerDisplay(current, now) : mode === "stopwatch" ? "00:00" : formatTime(minutes * 60000)}</div>
       <p className="focus-status" role="status">{current?.endedAt ? `จบรอบ · โฟกัสจริง ${formatTime(current.elapsedMs)}` : current ? current.runningSince === null ? "หยุดพัก · ไม่นับเวลา" : "กำลังโฟกัส" : "พร้อมเมื่อคุณพร้อม"}</p>
-      {!current && <><div className="focus-presets">{[25, 50].map((value) => <button className="secondary-button" key={value} aria-pressed={minutes === value} onClick={() => setMinutes(value)}>{value} นาที</button>)}<label>กำหนดเอง (นาที)<input type="number" min="1" max="240" value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} /></label></div><button className="primary-button" disabled={!Number.isFinite(minutes) || minutes < 1 || minutes > 240} onClick={() => void mutate((existing) => existing ?? { id: crypto.randomUUID(), taskId: task.id, startedAt: Date.now(), runningSince: Date.now(), elapsedMs: 0, durationMs: minutes * 60000, note: "" })}>เริ่มโฟกัส</button></>}
-      {current && !current.endedAt && <><div className="focus-actions"><button className="primary-button" onClick={() => void mutate((value) => value && !value.endedAt ? value.runningSince === null ? { ...value, runningSince: Date.now() } : elapsed(value, Date.now()) >= value.durationMs ? finish(value, Date.now()) : pause(value, Date.now()) : value)}>{current.runningSince === null ? "ทำต่อ" : "หยุดพัก"}</button><button className="secondary-button" onClick={() => void mutate((value) => value ? finish(value, Date.now()) : value)}>จบรอบ</button></div><label className="focus-note">สิ่งที่ทำต่อ<textarea value={current.note} placeholder="จดขั้นตอนถัดไป เพื่อกลับมาเริ่มได้ง่าย" onChange={(event) => { const note = event.target.value; void mutate((value) => value && !value.endedAt ? { ...value, note } : value); }} /></label></>}
+      {!current && <><div className="focus-presets" role="group" aria-label="รูปแบบการจับเวลา"><button className="secondary-button" aria-pressed={mode === "countdown"} onClick={() => setMode("countdown")}>นับถอยหลัง</button><button className="secondary-button" aria-pressed={mode === "stopwatch"} onClick={() => setMode("stopwatch")}>Stopwatch · ไม่กำหนดเวลา</button></div>{mode === "countdown" && <div className="focus-presets">{[25, 50].map((value) => <button className="secondary-button" key={value} aria-pressed={minutes === value} onClick={() => setMinutes(value)}>{value} นาที</button>)}<label>กำหนดเอง (นาที)<input type="number" min="1" max="240" value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} /></label></div>}<button className="primary-button" disabled={mode === "countdown" && (!Number.isFinite(minutes) || minutes < 1 || minutes > 240)} onClick={() => void mutate((existing) => existing ?? { id: crypto.randomUUID(), taskId: task.id, startedAt: Date.now(), runningSince: Date.now(), elapsedMs: 0, durationMs: mode === "stopwatch" ? 0 : minutes * 60000, mode, note: "" })}>เริ่มโฟกัส</button></>}
+      {current && !current.endedAt && <><div className="focus-actions"><button className="primary-button" onClick={() => void mutate((value) => value && !value.endedAt ? value.runningSince === null ? { ...value, runningSince: Date.now() } : timerComplete(value, Date.now()) ? finish(value, Date.now()) : pause(value, Date.now()) : value)}>{current.runningSince === null ? "ทำต่อ" : "หยุดพัก"}</button><button className="secondary-button" onClick={() => void mutate((value) => value ? finish(value, Date.now()) : value)}>จบรอบ</button></div><label className="focus-note">สิ่งที่ทำต่อ<textarea value={current.note} placeholder="จดขั้นตอนถัดไป เพื่อกลับมาเริ่มได้ง่าย" onChange={(event) => { const note = event.target.value; void mutate((value) => value && !value.endedAt ? { ...value, note } : value); }} /></label></>}
       {current?.endedAt && <div className="session-summary"><p>{current.note || "ยังไม่ได้จดสิ่งที่ทำต่อ"}</p><p role="status">{isSaved ? "บันทึกประวัติแล้ว" : "กำลังบันทึกประวัติ…"}</p><div className="focus-actions"><button disabled={!isSaved} className="primary-button" onClick={clear}>ทำต่ออีกรอบ</button><button disabled={!isSaved} className="secondary-button" onClick={() => { clear(); close(); }}>พัก</button><button disabled={!isSaved || task.status === "Done"} className="secondary-button" onClick={() => { if (save(task.id, { status: "Done" })) { clear(); close(); } }}>งานเสร็จแล้ว</button></div></div>}
     </>}
     <Subtasks items={task.subtasks} onChange={(subtasks) => save(task.id, { subtasks })} />

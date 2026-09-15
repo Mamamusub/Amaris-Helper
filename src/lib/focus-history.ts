@@ -25,7 +25,7 @@ export function focusDuration(ms: number) {
 }
 export function snapshotFocus(session: FocusSession, task: Task, subjects: Subject[]): FocusRecord {
   const subject = subjects.find((item) => item.id === task.subjectId);
-  return { id: session.id, startedAt: session.startedAt, endedAt: session.endedAt!, elapsedMs: session.elapsedMs, note: session.note, intervals: session.intervals, durationMs: session.durationMs, pausedMs: Math.max(0, session.endedAt! - session.startedAt - session.elapsedMs), outcome: session.elapsedMs >= session.durationMs ? "completed" : "ended-early", snapshot: { taskTitle: task.title, subjectId: task.subjectId ?? null, subjectName: subject?.name ?? (task.subjectId ? "วิชาที่ไม่มีข้อมูลชื่อ" : null), subjectColor: subject?.color } };
+  return { id: session.id, startedAt: session.startedAt, endedAt: session.endedAt!, elapsedMs: session.elapsedMs, note: session.note, intervals: session.intervals, durationMs: session.mode === "stopwatch" ? undefined : session.durationMs, pausedMs: Math.max(0, session.endedAt! - session.startedAt - session.elapsedMs), outcome: session.mode === "stopwatch" || session.elapsedMs >= session.durationMs ? "completed" : "ended-early", snapshot: { taskTitle: task.title, subjectId: task.subjectId ?? null, subjectName: subject?.name ?? (task.subjectId ? "วิชาที่ไม่มีข้อมูลชื่อ" : null), subjectColor: subject?.color } };
 }
 export function focusHistory(tasks: Task[], subjects: Subject[], zone = calendarTimeZone): HistoryRow[] {
   const seen = new Set<string>();

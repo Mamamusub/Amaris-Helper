@@ -194,3 +194,30 @@ test("legacy missing metadata stays unknown, only actual intervals establish pau
   const withIntervals = historyRecord("spans", undefined, { intervals: [{ start: records[0].startedAt, end: records[0].startedAt + 1500000 }] });
   assert.equal(focusHistory([{ ...base, focusSessions: [withIntervals] }], [])[0].pausedMs, 300000);
 });
+
+
+test("stopwatch persists, counts beyond presets, excludes pauses and saves actual time", () => {
+  const { timerComplete, timerDisplay } = load("src/lib/focus-timer.ts");
+  const start = { id: "watch", taskId: "one", mode: "stopwatch", startedAt: 1000, runningSince: 1000, elapsedMs: 0, durationMs: 0, note: "" };
+  assert.equal(timerDisplay(start, 1500), "00:00");
+  assert.equal(timerComplete(start, 18001000), false);
+  const restored = JSON.parse(JSON.stringify(start));
+  const paused = pause(restored, 18001000);
+  assert.equal(elapsed(paused, 18061000), 18000000);
+  assert.equal(timerDisplay(paused, 18061000), "300:00");
+  const resumed = { ...paused, runningSince: 18061000 };
+  const ended = finish(resumed, 18121000);
+  assert.equal(ended.elapsedMs, 18060000);
+  assert.equal(ended.endedAt, 18121000);
+  assert.equal(ended.intervals.length, 2);
+  assert.deepEqual(finish(ended, 19000000), ended);
+  const record = snapshotFocus(ended, { id: "one", title: "Study" }, []);
+  assert.equal(record.elapsedMs, 18060000);
+  assert.equal(record.pausedMs, 60000);
+  assert.equal(record.durationMs, undefined);
+  assert.equal(record.outcome, "completed");
+  assert.equal(finish(paused, 18061000).elapsedMs, 18000000);
+  const countdown = { ...start, mode: undefined, durationMs: 60000 };
+  assert.equal(timerComplete(countdown, 61000), true);
+  assert.equal(timerDisplay(countdown, 11000), "00:50");
+});
