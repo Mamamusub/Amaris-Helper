@@ -1,7 +1,9 @@
 ﻿"use client";
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { WorkspaceSync } from "@/lib/workspace-sync";
 import { localImport } from "@/lib/workspace-model";
+import { importGuestFiles, syncLocalFiles } from "@/lib/file-migration";
+import { accountStorage, documents, legacyDocuments } from "@/lib/account-storage";
 const CloudContext = createContext<WorkspaceSync | null>(null);
 export const useCloud = () => useContext(CloudContext);
 const noSubscribe = () => () => {};
@@ -9,6 +11,10 @@ const noSnapshot = () => null;
 export function useCloudSnapshot() {
   const cloud = useCloud();
   return useSyncExternalStore(cloud?.subscribe ?? noSubscribe, cloud?.getSnapshot ?? noSnapshot, noSnapshot);
+}
+export function useAccountStorage() {
+  const cloud = useCloud();
+  return useMemo(() => accountStorage(cloud, localStorage), [cloud]);
 }
 type Account = { id: string; email?: string };
 export default function AccountBoundary({ children }: { children: ReactNode }) {
@@ -37,7 +43,10 @@ export default function AccountBoundary({ children }: { children: ReactNode }) {
           cloudRef.current?.dispose();
           const next = id ? new WorkspaceSync(id, localStorage, window.fetch.bind(window), () => { setAccount(undefined); void check(); }) : null;
           cloudRef.current = next; setCloud(next); setAccount(body.user); accountRef.current = id;
-          if (next) void next.sync();
+          if (next) {
+            const legacy = legacyDocuments(localStorage, next.key);
+            if (legacy.length) next.import(legacy); else void next.sync();
+          }
           const notification = new BroadcastChannel("amaris-auth"); notification.postMessage("changed"); notification.close();
         } else setAccount(body.user);
         setError("");
@@ -73,8 +82,12 @@ export default function AccountBoundary({ children }: { children: ReactNode }) {
 }
 function SyncBar({ cloud }: { cloud: WorkspaceSync }) {
   const state = useSyncExternalStore(cloud.subscribe, cloud.getSnapshot, cloud.getSnapshot);
-  const [importRecords] = useState(() => { try { return localImport(localStorage); } catch { return null; } });
+  const [importRecords] = useState(() => { try { return [...localImport(localStorage), ...legacyDocuments(localStorage)]; } catch { return null; } });
   const [showImport, setShowImport] = useState(() => !localStorage.getItem(`amaris.import-choice.${cloud.userId}`));
+  const [uploadName, setUploadName] = useState("");
+  const [fileError, setFileError] = useState("");
+  const [fileBusy, setFileBusy] = useState(false);
+  const [fileNotice, setFileNotice] = useState("");
   const [importOperation, setImportOperation] = useState<string | null>(null);
   const importQueued = !!importOperation && state.pending.some((operation) => operation.operationId === importOperation);
   const importConfirmed = !!importOperation && state.acknowledged.includes(importOperation);
@@ -85,17 +98,49 @@ function SyncBar({ cloud }: { cloud: WorkspaceSync }) {
     window.addEventListener("offline", offline); window.addEventListener("online", retry); window.addEventListener("focus", retry);
     return () => { clearInterval(timer); window.removeEventListener("offline", offline); window.removeEventListener("online", retry); window.removeEventListener("focus", retry); };
   }, [cloud]);
+  useEffect(() => {
+    let previous = JSON.stringify(documents(cloud));
+    return cloud.subscribe(() => {
+      const next = JSON.stringify(documents(cloud));
+      if (next !== previous) { previous = next; window.dispatchEvent(new StorageEvent("storage", { key: null })); }
+    });
+  }, [cloud]);
+  useEffect(() => {
+    let cancelled = false, active = false;
+    const syncFiles = async () => {
+      if (active || cancelled || cloud.getSnapshot().status !== "บันทึกแล้ว") return;
+      active = true;
+      try { await syncLocalFiles(cloud, () => cancelled, name => { if (!cancelled) setUploadName(name); }); if (!cancelled) setFileError(""); }
+      catch (error) { if (!cancelled) setFileError(error instanceof Error ? error.message : "ซิงก์ไฟล์ไม่สำเร็จ"); }
+      finally { active = false; if (!cancelled) setUploadName(""); }
+    };
+    void syncFiles();
+    const timer = setInterval(() => void syncFiles(), 15000);
+    const refresh = () => void syncFiles();
+    window.addEventListener("online", refresh);
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener("online", refresh); };
+  }, [cloud]);
+  async function importFiles() {
+    setFileBusy(true); setFileError(""); setFileNotice("");
+    try { await importGuestFiles(cloud); setFileNotice("คัดลอกไฟล์ Local เข้าคิวอัปโหลดของบัญชีแล้ว ต้นฉบับยังอยู่ในเครื่อง"); }
+    catch (error) { setFileError(error instanceof Error ? error.message : "นำเข้าไฟล์ไม่สำเร็จ"); }
+    finally { setFileBusy(false); }
+  }
   function exportDraft() {
     const url = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }));
     const a = document.createElement("a"); a.href = url; a.download = "amaris-unsynced-draft.json"; a.click(); URL.revokeObjectURL(url);
   }
   return <div className="sync-bar">
     <span role="status">{state.status}{state.pending.length ? ` · ${state.pending.length} รายการรอส่ง` : ""}</span>
+    {uploadName && <span role="status">กำลังอัปโหลด {uploadName}…</span>}
+    {fileError && <span role="alert">ไฟล์: {fileError} · ระบบจะลองใหม่เมื่อออนไลน์</span>}
+    {fileNotice && <span role="status">{fileNotice}</span>}
+    <button className="text-button" disabled={fileBusy || state.status !== "บันทึกแล้ว"} onClick={() => void importFiles()}>{fileBusy ? "กำลังนำเข้าไฟล์…" : "นำไฟล์ Local (Storage / Career / Exam) เข้าบัญชี"}</button>
     {state.error && <span role="alert">{state.error}</span>}
     {!!state.pending.length && <details><summary>ดูรายการที่ยังไม่ส่ง</summary>{state.pending.flatMap((operation) => operation.changes.map((change) => <div key={`${operation.operationId}:${change.kind}:${change.id}`}><strong>{String(change.data.title ?? change.data.name ?? change.id)}</strong><pre style={{ whiteSpace: "pre-wrap", maxHeight: 240, overflow: "auto" }}>{JSON.stringify(change.data, null, 2)}</pre></div>))}</details>}
     <button className="text-button" onClick={() => void cloud.sync(true)}>ลองใหม่ / โหลดล่าสุด</button>
     {!!state.pending.length && <><button className="text-button" onClick={exportDraft}>ส่งออกแบบร่าง</button><button className="text-button" onClick={() => { exportDraft(); void cloud.discardPending(); }}>ส่งออกและทิ้งการแก้ไขที่ยังไม่ส่ง ใช้ข้อมูลเซิร์ฟเวอร์</button></>}
     {importRecords === null && <span role="alert">อ่านข้อมูล Local ไม่สำเร็จ ต้นฉบับยังอยู่ในเครื่อง</span>}
-    {!!importRecords?.length && (showImport ? <div><strong>พบข้อมูลในเครื่อง: {importRecords.filter((r) => r.kind === "task").length} งาน · {importRecords.filter((r) => r.kind === "subject").length} วิชา · {importRecords.filter((r) => r.kind === "thread").length} ชุดโน้ต/บทสนทนา · {importRecords.filter((r) => r.kind === "run").length} Pipeline</strong><button className="secondary-button" disabled={importQueued || !!state.pending.length || state.status !== "บันทึกแล้ว"} onClick={() => { if (cloud.import(importRecords)) setImportOperation(cloud.getSnapshot().pending.at(-1)?.operationId ?? null); }}>นำข้อมูลในเครื่องเข้าบัญชี</button><button className="text-button" onClick={() => { localStorage.setItem(`amaris.import-choice.${cloud.userId}`, "skip"); setShowImport(false); }}>ข้ามก่อน</button>{importConfirmed && <span>นำเข้าสำเร็จแล้ว ต้นฉบับ Local ยังอยู่</span>}</div> : <button className="text-button" onClick={() => setShowImport(true)}>นำเข้าข้อมูล Local</button>)}
+    {!!importRecords?.length && (showImport ? <div><strong>พบข้อมูลในเครื่อง: {importRecords.filter((r) => r.kind === "task").length} งาน · {importRecords.filter((r) => r.kind === "subject").length} วิชา · {importRecords.filter((r) => r.kind === "thread").length} ชุดโน้ต/บทสนทนา · {importRecords.filter((r) => r.kind === "run").length} Pipeline · {importRecords.filter((r) => r.kind === "document").length} ชุดข้อมูล Career / Exam / Finance / Settings</strong><button className="secondary-button" disabled={importQueued || !!state.pending.length || state.status !== "บันทึกแล้ว"} onClick={() => { if (cloud.import(importRecords)) setImportOperation(cloud.getSnapshot().pending.at(-1)?.operationId ?? null); }}>นำข้อมูลในเครื่องเข้าบัญชี</button><button className="text-button" onClick={() => { localStorage.setItem(`amaris.import-choice.${cloud.userId}`, "skip"); setShowImport(false); }}>ข้ามก่อน</button>{importConfirmed && <span>นำเข้าสำเร็จแล้ว ต้นฉบับ Local ยังอยู่</span>}</div> : <button className="text-button" onClick={() => setShowImport(true)}>นำเข้าข้อมูล Local</button>)}
   </div>;
 }

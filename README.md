@@ -180,4 +180,8 @@ Run `node --test tests/*.test.mjs`, `npm run lint`, and `npm run build` to verif
 localStorage harness, including remounts, safe migration and failed writes. It
 does not replace real-browser layout, focus or hydration testing. No dependency
 was added. Storage remains local to this browser; concurrent browser tabs and
-cross-device synchronization are not implemented.
+cross-device synchronization are available when signed in; see docs/google-login-sync.md.
+
+## Account sync across devices
+
+Signed-in workspace data now includes Career, Exam/checklists, Finance, Build Lab, navigation preferences, active Focus sessions, and private Study/Career/Exam files. Apply both 20260916 migrations and configure Supabase before using this feature. See [setup and migration instructions](docs/google-login-sync.md#upgrade-all-workspace-data-and-files). Guest data/files can be copied into the account from the sync bar on the original device.

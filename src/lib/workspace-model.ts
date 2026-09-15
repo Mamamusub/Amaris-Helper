@@ -1,6 +1,6 @@
 ﻿import type { Task, Subject, AgentRun } from "./types";
 import { demoTasks, demoSubjects, storageKeys, type StoredMessages } from "./storage";
-export type Kind = "task" | "subject" | "thread" | "run";
+export type Kind = "task" | "subject" | "thread" | "run" | "document";
 export type RecordData = { id: string; [key: string]: unknown };
 export type CloudRecord = { kind: Kind; id: string; data: RecordData; version: number };
 export type Change = CloudRecord;
@@ -10,7 +10,7 @@ export function materialize(records: CloudRecord[]): WorkspaceData {
   const ofKind = (kind: Kind) => records.filter((row) => row.kind === kind).map((row) => row.data);
   return { tasks: ofKind("task") as Task[], subjects: ofKind("subject").filter((row) => !row.deletedAt) as Subject[], runs: ofKind("run").filter((row) => !row.deletedAt) as AgentRun[], messages: ofKind("thread").filter((row) => !row.deletedAt).reduce<StoredMessages>((threads, row) => { const { threadId, ...message } = row; if (typeof threadId === "string") (threads[threadId] ??= []).push(message as unknown as StoredMessages[string][number]); return threads; }, {}) };
 }
-export function collection(kind: Kind, value: Task[] | Subject[] | AgentRun[] | StoredMessages): RecordData[] {
+export function collection(kind: Kind, value: Task[] | Subject[] | AgentRun[] | StoredMessages | RecordData[]): RecordData[] {
   return kind === "thread" ? Object.entries(value as StoredMessages).flatMap(([threadId, messages]) => messages.map((message) => ({ ...message, threadId }))) : value as RecordData[];
 }
 export function localImport(storage: Pick<Storage, "getItem">): CloudRecord[] {

@@ -39,7 +39,7 @@ function harness() {
     const importModule = (name) => {
       if (name.endsWith(".css")) return { default: {} };
       if (name === "react") return react;
-      if (name.endsWith("account-boundary")) return { default: ({ children }) => children, useCloud: () => null, useCloudSnapshot: () => null };
+      if (name.endsWith("account-boundary")) return { default: ({ children }) => children, useCloud: () => null, useCloudSnapshot: () => null, useAccountStorage: () => localStorage };
       if (/components\/(pipeline-view|integrations)/.test(name)) return { default: stub, AIStatus: stub, CalendarReturnNotice: stub, IntegrationSettings: stub, TaskIntegrations: stub };
       if (name.endsWith("use-pipeline")) return { usePipeline: () => ({ runs: [], start: stub, saveResponse: stub }) };
       if (name.startsWith("@/") || name.startsWith(".")) {

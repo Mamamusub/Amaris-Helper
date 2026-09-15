@@ -1,5 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useCloud, useCloudSnapshot } from "./account-boundary";
+import { fileRecords, fileRecordId, uploadAccountFile } from "@/lib/account-files";
+import { documents } from "@/lib/account-storage";
 import type { Subject } from "@/lib/types";
 import { fileAsPdf, fileKind, listSubjectFiles, saveSubjectFiles, type SubjectFile, type SubjectFolder, listSubjectFolders, createSubjectFolder } from "@/lib/subject-files";
 import StoragePreview from "./storage-preview";
@@ -7,8 +10,14 @@ import styles from "./storage-view.module.css";
 
 const sizeLabel = (n: number) => n < 1024 * 1024 ? `${Math.ceil(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 export default function StorageView({ subjects, scope, collection }: { subjects: Subject[]; scope: string; collection?: { id: string; name: string } }) {
-  const [files, setFiles] = useState<SubjectFile[]>([]);
-  const [subfolders, setSubfolders] = useState<SubjectFolder[]>([]);
+  const cloud = useCloud();
+  useCloudSnapshot();
+  const area = collection ? "career" : "study";
+  const [localFiles, setFiles] = useState<SubjectFile[]>([]);
+  const [localFolders, setSubfolders] = useState<SubjectFolder[]>([]);
+  const knownFiles = new Set(cloud ? documents(cloud).map(row => row.id) : []);
+  const files = cloud ? [...fileRecords<SubjectFile>(cloud, area).map(file => ({ ...file, blob: localFiles.find(local => local.id === file.id)?.blob ?? new Blob() })), ...localFiles.filter(file => !knownFiles.has(fileRecordId(area, file.id)))] : localFiles;
+  const subfolders = cloud ? fileRecords<SubjectFolder>(cloud, area, "folder") : localFolders;
   const [path, setPath] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [folderName, setFolderName] = useState("");
@@ -25,7 +34,11 @@ export default function StorageView({ subjects, scope, collection }: { subjects:
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listSubjectFiles(scope), collection ? Promise.resolve([]) : listSubjectFolders(scope)]).then(([next, directories]) => { if (!cancelled) { setSubfolders(directories); setFiles(next); setLoading(false); } }).catch((e: Error) => { if (!cancelled) { setError(e.message); setLoading(false); } });
+    Promise.all([listSubjectFiles(scope), collection ? Promise.resolve([]) : listSubjectFolders(scope)]).then(([next, directories]) => {
+      if (cancelled) return;
+      setSubfolders(directories); setFiles(next);
+      if (!cancelled) setLoading(false);
+    }).catch((e: Error) => { if (!cancelled) { setError(e.message); setLoading(false); } });
     return () => { cancelled = true; };
   }, [scope, revision, collection]);
   const folders = collection ? [{ ...collection, color: "#879f58" }] : subjects.map((s) => ({ id: s.id, name: s.name, color: s.color }));
@@ -45,7 +58,9 @@ export default function StorageView({ subjects, scope, collection }: { subjects:
         additions.push({ id: crypto.randomUUID(), scope, subjectId: folder.id, subjectName: folder.name, folderId: currentFolderId, name: file.name.replace(/\.(pdf|png)$/i, "") || "Untitled", kind, size: file.size, createdAt: new Date().toISOString(), blob: file });
       }
       await saveSubjectFiles(additions);
-      setFiles((current) => [...current, ...additions]); setNotice(`นำเข้าแล้ว ${additions.length} ไฟล์`);
+      setFiles(current => [...current, ...additions]);
+      if (cloud) for (const file of additions) { const uploaded = await uploadAccountFile(cloud, area, file); await saveSubjectFiles([uploaded]); }
+      setNotice(`นำเข้าแล้ว ${additions.length} ไฟล์`);
     } catch (e) { setError(e instanceof Error ? e.message : "นำเข้าไฟล์ไม่สำเร็จ"); }
     finally { setBusy(false); if (input.current) input.current.value = ""; }
   }
@@ -53,7 +68,7 @@ export default function StorageView({ subjects, scope, collection }: { subjects:
     const cleaned = name.trim().replace(/\.(pdf|png)$/i, "").trim();
     if (!cleaned) { setError("กรุณาระบุชื่อไฟล์"); return; }
     setBusy(true); setError("");
-    try { const next = { ...file, name: cleaned }; await saveSubjectFiles([next]); setFiles((all) => all.map((f) => f.id === file.id ? next : f)); setRenaming(null); setNotice("เปลี่ยนชื่อแล้ว"); }
+    try { const next = { ...file, name: cleaned }; if (cloud) await uploadAccountFile(cloud, area, next); else await saveSubjectFiles([next]); setFiles((all) => all.map((f) => f.id === file.id ? next : f)); setRenaming(null); setNotice("เปลี่ยนชื่อแล้ว"); }
     catch { setError("เปลี่ยนชื่อไม่สำเร็จ กรุณาลองใหม่"); } finally { setBusy(false); }
   }
   async function exportPdf(file: SubjectFile) {
@@ -71,16 +86,22 @@ export default function StorageView({ subjects, scope, collection }: { subjects:
     if (!folder || busy) return;
     setBusy(true); setError("");
     const next: SubjectFolder = { id: crypto.randomUUID(), scope, subjectId: folder.id, subjectName: folder.name, parentId: currentFolderId, name: folderName.trim(), createdAt: new Date().toISOString() };
-    try { await createSubjectFolder(next); setSubfolders((all) => [...all, next]); setCreating(false); setFolderName(""); setNotice("สร้างโฟลเดอร์แล้ว"); }
+    try {
+      if (cloud) {
+        if (!next.name || next.name.length > 100) throw new Error("กรุณาตั้งชื่อโฟลเดอร์ 1–100 ตัวอักษร");
+        if (subfolders.some(f => f.subjectId === next.subjectId && f.parentId === next.parentId && f.name.toLocaleLowerCase() === next.name.toLocaleLowerCase())) throw new Error("มีโฟลเดอร์ชื่อนี้อยู่แล้ว");
+        const id = fileRecordId(area, next.id, "folder");
+        if (!cloud.enqueue("document", [{ id, area, category: "folder", item: next }])) throw new Error("บันทึกโฟลเดอร์ไม่สำเร็จ");
+      } else await createSubjectFolder(next); setSubfolders((all) => [...all, next]); setCreating(false); setFolderName(""); setNotice("สร้างโฟลเดอร์แล้ว"); }
     catch (e) { setError(e instanceof Error ? e.message : "สร้างโฟลเดอร์ไม่สำเร็จ"); } finally { setBusy(false); }
   }
   function navigatePath(next: string[]) { setPath(next); setQuery(""); setCreating(false); setRenaming(null); setNotice(""); }
-  return <div className={collection ? `${styles.page} ${styles.embedded}` : `content ${styles.page}`}>{!collection && <div className={styles.heading}><div><span className="section-kicker">A PLACE FOR YOUR KNOWLEDGE</span><h2>Study storage<span>.</span></h2><p>เอกสารและภาพประกอบ จัดไว้เป็นที่ แยกตามวิชาของคุณ</p></div><span className={styles.local}>◉ เก็บในเครื่องนี้</span></div>}
+  return <div className={collection ? `${styles.page} ${styles.embedded}` : `content ${styles.page}`}>{!collection && <div className={styles.heading}><div><span className="section-kicker">A PLACE FOR YOUR KNOWLEDGE</span><h2>Study storage<span>.</span></h2><p>เอกสารและภาพประกอบ จัดไว้เป็นที่ แยกตามวิชาของคุณ</p></div><span className={styles.local}>{cloud ? "◉ ซิงก์ตามบัญชี" : "◉ เก็บในเครื่องนี้"}</span></div>}
     <div className={styles.toolbar}><div className={styles.breadcrumb}>{collection ? <h3>{collection.name}</h3> : <><button disabled={busy} onClick={() => openFolder(null)}>Storage</button>{folder && <><span>/</span><button disabled={busy} onClick={() => navigatePath([])}>{folder.name}</button>{path.map((id, index) => <span key={id}> / <button disabled={busy} onClick={() => navigatePath(path.slice(0, index + 1))}>{subfolders.find((f) => f.id === id)?.name}</button></span>)}</>}</>}</div><input aria-label={folder ? "ค้นหาไฟล์" : "ค้นหาวิชา"} placeholder={folder ? "ค้นหาไฟล์…" : "ค้นหาวิชา…"} value={query} onChange={(e) => setQuery(e.target.value)} />{folder && !collection && <button className="secondary-button" disabled={busy || loading} onClick={() => { setCreating(true); setFolderName(""); }}>＋ สร้างโฟลเดอร์</button>}{folder && <button className="primary-button" disabled={busy || loading} onClick={() => input.current?.click()}>＋ Import files</button>}<input ref={input} type="file" hidden multiple accept=".pdf,.png,application/pdf,image/png" onChange={(e) => void importFiles(Array.from(e.target.files ?? []))} /></div>
     {creating && <form className={styles.createFolder} onSubmit={(e) => { e.preventDefault(); void addFolder(); }}><label>ชื่อโฟลเดอร์<input autoFocus required maxLength={100} value={folderName} onChange={(e) => setFolderName(e.target.value)} placeholder="เช่น บทที่ 1 หรือ เอกสารสอบ" /></label><button className="primary-button" disabled={busy || !folderName.trim()}>สร้าง</button><button type="button" className="secondary-button" disabled={busy} onClick={() => setCreating(false)}>ยกเลิก</button></form>}
-    <p className={styles.note}>PDF / PNG · สูงสุด 25 MB ต่อไฟล์ · ไฟล์ยังไม่ซิงก์ข้ามเครื่อง การล้างข้อมูลเว็บไซต์จะลบไฟล์ที่เก็บไว้</p>
+    <p className={styles.note}>PDF / PNG · สูงสุด 25 MB ต่อไฟล์ · {cloud ? "ไฟล์ซิงก์กับบัญชีนี้ · ดูสถานะการบันทึกด้านบน" : "ไฟล์เก็บในเครื่องนี้ · เข้าสู่ระบบเพื่อนำไฟล์เข้าบัญชี"}</p>
     {error && <p role="alert" className={styles.error}>{error} <button disabled={busy} onClick={() => { setError(""); setRevision((r) => r + 1); }}>ลองโหลดใหม่</button></p>}{notice && <p role="status">{notice}</p>}{busy && <p role="status">กำลังจัดการไฟล์…</p>}
-    {loading ? <p role="status">กำลังโหลด Storage…</p> : !folder ? <><div className={styles.sectionTitle}><h3>โฟลเดอร์วิชา</h3><span>{folders.length} folders · {files.length} files</span></div><div className={styles.folders}>{folders.filter((s) => s.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())).map((s) => <button key={s.id} onClick={() => openFolder(s.id)}><span className={styles.folderIcon} style={{ color: s.color }}>▰</span><strong>{s.name}</strong><small>{files.filter((f) => f.subjectId === s.id).length} ไฟล์ <span>↗</span></small></button>)}</div>{!folders.length && <div className={styles.empty}><h3>เริ่มจากเพิ่มวิชาในหน้า Study</h3><p>วิชาที่สร้างไว้จะปรากฏเป็นโฟลเดอร์ที่นี่อัตโนมัติ</p></div>}{!!folders.length && !folders.some((s) => s.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())) && <p className={styles.empty}>ไม่พบวิชาที่ค้นหา</p>}</> : <section className={styles.filePanel}><div className={styles.sectionTitle}><h3>{currentFolderId ? subfolders.find((f) => f.id === currentFolderId)?.name : collection ? "ไฟล์ทั้งหมด" : "ไฟล์ในวิชา"}</h3><span>{shown.length} files</span></div><div className={styles.folders}>{children.map((child) => <button disabled={busy} key={child.id} onClick={() => navigatePath([...path, child.id])}><span className={styles.folderIcon}>▰</span><strong>{child.name}</strong><small>เปิดโฟลเดอร์ ↗</small></button>)}</div>{shown.map((file) => <div className={styles.file} key={file.id}><span className={file.kind === "pdf" ? styles.pdf : styles.png}>{file.kind.toUpperCase()}</span><div className={styles.fileInfo}>{renaming === file.id ? <form onSubmit={(e) => { e.preventDefault(); void rename(file); }}><input autoFocus aria-label="ชื่อไฟล์ใหม่" maxLength={180} value={name} onChange={(e) => setName(e.target.value)} /><button disabled={busy} type="submit">บันทึก</button><button type="button" disabled={busy} onClick={() => setRenaming(null)}>ยกเลิก</button></form> : <button className={styles.fileOpen} onClick={() => setPreview(file)}>{file.name}.{file.kind}</button>}<small>{sizeLabel(file.size)} · {new Date(file.createdAt).toLocaleDateString("th-TH")}</small></div><div className={styles.actions}><button className="secondary-button" onClick={() => setPreview(file)}>เปิดไฟล์</button><button className="secondary-button" disabled={busy} onClick={() => { setRenaming(file.id); setName(file.name); }}>เปลี่ยนชื่อ</button><button className="secondary-button" disabled={busy} onClick={() => void exportPdf(file)}>↓ Export PDF</button></div></div>)}{!shown.length && !children.length && <div className={styles.empty}><span>＋</span><h3>{query ? "ไม่พบไฟล์ที่ค้นหา" : collection ? "เพิ่ม Resume, Portfolio หรือเอกสาร Career" : "เก็บเอกสารแรกของวิชานี้"}</h3><p>กด Import files เพื่อเลือก PDF หรือ PNG ได้หลายไฟล์</p></div>}<p className={styles.note}>PDF ส่งออกเป็นไฟล์เดิมครบทุกหน้า · PNG แปลงเป็น PDF ขนาด A4 โดยรักษาสัดส่วนภาพ</p></section>}
+    {loading ? <p role="status">กำลังโหลด Storage…</p> : !folder ? <><div className={styles.sectionTitle}><h3>โฟลเดอร์วิชา</h3><span>{folders.length} folders · {files.length} files</span></div><div className={styles.folders}>{folders.filter((s) => s.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())).map((s) => <button key={s.id} onClick={() => openFolder(s.id)}><span className={styles.folderIcon} style={{ color: s.color }}>▰</span><strong>{s.name}</strong><small>{files.filter((f) => f.subjectId === s.id).length} ไฟล์ <span>↗</span></small></button>)}</div>{!folders.length && <div className={styles.empty}><h3>เริ่มจากเพิ่มวิชาในหน้า Study</h3><p>วิชาที่สร้างไว้จะปรากฏเป็นโฟลเดอร์ที่นี่อัตโนมัติ</p></div>}{!!folders.length && !folders.some((s) => s.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())) && <p className={styles.empty}>ไม่พบวิชาที่ค้นหา</p>}</> : <section className={styles.filePanel}><div className={styles.sectionTitle}><h3>{currentFolderId ? subfolders.find((f) => f.id === currentFolderId)?.name : collection ? "ไฟล์ทั้งหมด" : "ไฟล์ในวิชา"}</h3><span>{shown.length} files</span></div><div className={styles.folders}>{children.map((child) => <button disabled={busy} key={child.id} onClick={() => navigatePath([...path, child.id])}><span className={styles.folderIcon}>▰</span><strong>{child.name}</strong><small>เปิดโฟลเดอร์ ↗</small></button>)}</div>{shown.map((file) => <div className={styles.file} key={file.id}><span className={file.kind === "pdf" ? styles.pdf : styles.png}>{file.kind.toUpperCase()}</span><div className={styles.fileInfo}>{renaming === file.id ? <form onSubmit={(e) => { e.preventDefault(); void rename(file); }}><input autoFocus aria-label="ชื่อไฟล์ใหม่" maxLength={180} value={name} onChange={(e) => setName(e.target.value)} /><button disabled={busy} type="submit">บันทึก</button><button type="button" disabled={busy} onClick={() => setRenaming(null)}>ยกเลิก</button></form> : <button className={styles.fileOpen} onClick={() => setPreview(file)}>{file.name}.{file.kind}</button>}<small>{cloud && !file.remotePath && "รออัปโหลด · "}{sizeLabel(file.size)} · {new Date(file.createdAt).toLocaleDateString("th-TH")}</small></div><div className={styles.actions}><button className="secondary-button" onClick={() => setPreview(file)}>เปิดไฟล์</button><button className="secondary-button" disabled={busy} onClick={() => { setRenaming(file.id); setName(file.name); }}>เปลี่ยนชื่อ</button><button className="secondary-button" disabled={busy} onClick={() => void exportPdf(file)}>↓ Export PDF</button></div></div>)}{!shown.length && !children.length && <div className={styles.empty}><span>＋</span><h3>{query ? "ไม่พบไฟล์ที่ค้นหา" : collection ? "เพิ่ม Resume, Portfolio หรือเอกสาร Career" : "เก็บเอกสารแรกของวิชานี้"}</h3><p>กด Import files เพื่อเลือก PDF หรือ PNG ได้หลายไฟล์</p></div>}<p className={styles.note}>PDF ส่งออกเป็นไฟล์เดิมครบทุกหน้า · PNG แปลงเป็น PDF ขนาด A4 โดยรักษาสัดส่วนภาพ</p></section>}
     {preview && <StoragePreview key={preview.id} file={preview} close={() => setPreview(null)} />}
   </div>;
 }

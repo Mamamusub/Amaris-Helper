@@ -2,18 +2,95 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import path from "node:path";
 import { createRequire } from "node:module";
 import ts from "typescript";
 import { PDFDocument } from "pdf-lib";
 import "fake-indexeddb/auto";
 const require = createRequire(import.meta.url);
-const mod = { exports: {} };
-const compiled = ts.transpileModule(fs.readFileSync("src/lib/subject-files.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-vm.runInThisContext(`(function(module, exports, require) { ${compiled}\n})`)(mod, mod.exports, require);
+function load(file) {
+  const mod = { exports: {} };
+  const compiled = ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  vm.runInThisContext(`(function(module, exports, require) { ${compiled}\n})`)(mod, mod.exports, name => name.startsWith(".") ? load(path.join(path.dirname(file), name + ".ts")) : require(name));
+  return mod.exports;
+}
+const mod = { exports: load("src/lib/subject-files.ts") };
 const { fileKind, fileAsPdf } = mod.exports;
 const { listSubjectFiles, saveSubjectFiles } = mod.exports;
 const { listSubjectFolders, createSubjectFolder } = mod.exports;
 const png = new Blob([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")]);
+
+test("account files upload bytes once, sync metadata without blobs, and download on a second device", async () => {
+  const { uploadAccountFile, accountFileBlob } = load("src/lib/account-files.ts");
+  const originalFetch = globalThis.fetch;
+  const calls = [], changes = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    if (url === "/api/files") return Response.json({ userId: "alice", path: "alice/file", signedUrl: "https://storage.test/upload" });
+    if (url === "https://storage.test/upload") return Response.json({});
+    if (url.startsWith("/api/files?")) return Response.json({ signedUrl: "https://storage.test/download" });
+    return new Response(png);
+  };
+  const cloud = { userId: "alice", enqueue: (kind, value) => { changes.push({kind, value}); return true; } };
+  try {
+    const file = { id: "cv", name: "CV", size: png.size, createdAt: "2026-09-16", blob: png };
+    const uploaded = await uploadAccountFile(cloud, "career", file);
+    assert.equal(calls[1].init.body, png);
+    assert.equal(changes[0].kind, "document");
+    assert.equal(changes[0].value[0].item.blob, undefined);
+    assert.equal(uploaded.ownerId, "alice");
+    await uploadAccountFile(cloud, "career", { ...uploaded, name: "Updated CV" });
+    assert.equal(calls.length, 2);
+    const downloaded = await accountFileBlob({ ...uploaded, blob: new Blob() });
+    assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), Buffer.from(await png.arrayBuffer()));
+    assert.match(calls[2].url, /userId=alice/);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("failed upload never queues a completed file record", async () => {
+  const { uploadAccountFile } = load("src/lib/account-files.ts");
+  const originalFetch = globalThis.fetch;
+  let queued = false;
+  globalThis.fetch = async () => Response.json({ error: "Storage unavailable" }, { status: 503 });
+  try {
+    await assert.rejects(uploadAccountFile({ userId: "alice", enqueue: () => { queued = true; } }, "career", { id: "failed", name: "CV", size: png.size, createdAt: "today", blob: png }), /Storage unavailable/);
+    assert.equal(queued, false);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("guest file migration copies originals, keeps account boundaries and never revives removed metadata", async () => {
+  const { importGuestFiles, syncLocalFiles } = load("src/lib/file-migration.ts");
+  const { saveStoredFile, getStoredFiles } = load("src/lib/exam-files.ts");
+  const originalFetch = globalThis.fetch;
+  let uploads = 0;
+  globalThis.fetch = async url => url === "/api/files"
+    ? Response.json({ userId: "migration-owner", path: `migration-owner/${++uploads}`, signedUrl: "https://storage.test/upload" })
+    : Response.json({});
+  const records = [];
+  const cloud = {
+    userId: "migration-owner", key: "amaris.account.migration-owner",
+    getSnapshot: () => ({ records, pending: [] }),
+    import(rows) { for (const row of rows) if (!records.some(old => old.id === row.id)) records.push({ ...row, version: 1 }); return true; },
+    enqueue(kind, values) { for (const data of values) if (!records.some(old => old.id === data.id)) records.push({ kind, id: data.id, data, version: 1 }); return true; },
+  };
+  try {
+    await saveSubjectFiles([{ id: "guest-file", scope: "local", subjectId: "math", subjectName: "Math", name: "Notes", kind: "png", size: png.size, createdAt: "2026-09-16", blob: png }]);
+    await saveStoredFile({ id: "guest-exam", subjectId: "math", name: "Exam.png", type: "image/png", size: png.size, createdAt: "2026-09-16", blob: png });
+    await importGuestFiles(cloud);
+    assert.ok((await listSubjectFiles("local")).some(file => file.id === "guest-file"));
+    assert.ok((await getStoredFiles()).some(file => file.id === "guest-exam"));
+    assert.ok((await listSubjectFiles(cloud.key)).some(file => file.id === "import-guest-file"));
+    assert.equal((await getStoredFiles("amaris.account.other")).length, 0);
+    await syncLocalFiles(cloud);
+    const uploaded = uploads;
+    assert.ok(records.some(row => row.id === "file:study:import-guest-file"));
+    const removed = records.find(row => row.id === "file:exam:import-guest-exam");
+    removed.data = { id: removed.id, area: "exam", category: "file", deletedAt: "today" };
+    await importGuestFiles(cloud); await syncLocalFiles(cloud);
+    assert.equal(uploads, uploaded);
+    assert.equal(removed.data.deletedAt, "today");
+  } finally { globalThis.fetch = originalFetch; }
+});
 test("file import identifies actual content and rejects unsupported files", async () => {
   assert.equal(await fileKind(png), "png");
   assert.equal(await fileKind(new Blob(["%PDF-1.7\n"])), "pdf");

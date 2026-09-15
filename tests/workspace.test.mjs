@@ -17,6 +17,16 @@ before(async () => {
     grant usage on schema auth, public to authenticated, anon;
     grant execute on function auth.uid() to authenticated, anon;`);
   await db.exec(fs.readFileSync("supabase/migrations/202609090001_workspace.sql", "utf8"));
+  await db.exec(fs.readFileSync("supabase/migrations/202609160001_account_documents.sql", "utf8"));
+  await db.exec(`create schema storage;
+    create table storage.buckets(id text primary key, name text, public boolean, file_size_limit bigint);
+    create table storage.objects(id bigint generated always as identity primary key, bucket_id text, name text);
+    alter table storage.objects enable row level security;
+    create function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name, '/') $$;
+    grant usage on schema storage to authenticated;
+    grant select, insert, update, delete on storage.objects to authenticated;
+    grant usage on all sequences in schema storage to authenticated;`);
+  await db.exec(fs.readFileSync("supabase/migrations/202609160002_account_files.sql", "utf8"));
 });
 after(() => db.close());
 let serial = Promise.resolve();
@@ -41,6 +51,17 @@ test("migration executes; RLS and direct-write grants isolate accounts", async (
   await assert.rejects(asUser(alice, "delete from public.workspace_records"), /permission denied/);
   await assert.rejects(asUser(null, "select public.workspace_snapshot()", [], "anon"), /permission denied/);
   const owned = await snapshot(bob); assert.equal(owned.some((row) => row.id === "private"), false);
+});
+
+test("private file storage permits only owner paths and refuses overwrites", async () => {
+  const bucket = (await db.query("select public, file_size_limit from storage.buckets where id='workspace-files'")).rows[0];
+  assert.equal(bucket.public, false);
+  assert.equal(Number(bucket.file_size_limit), 25 * 1024 * 1024);
+  await asUser(alice, "insert into storage.objects(bucket_id,name) values ('workspace-files',$1)", [`${alice}/resume`]);
+  assert.equal((await asUser(alice, "select * from storage.objects")).length, 1);
+  assert.equal((await asUser(bob, "select * from storage.objects")).length, 0);
+  await assert.rejects(asUser(bob, "insert into storage.objects(bucket_id,name) values ('workspace-files',$1)", [`${alice}/spoof`]), /row-level security/);
+  assert.equal((await asUser(alice, "update storage.objects set name='changed' returning *")).length, 0);
 });
 
 test("composite foreign keys reject cross-account subjects and parent tasks atomically", async () => {
@@ -79,6 +100,7 @@ function load(file, cache = new Map()) {
   cache.set(file, mod.exports); return mod.exports;
 }
 const { WorkspaceSync } = load("src/lib/workspace-sync.ts");
+const { accountStorage, legacyDocuments } = load("src/lib/account-storage.ts");
 const memory = () => { const values = new Map(); return { values, getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) }; };
 function transport(user) {
   const faults = { offline: false, loseReply: false };
@@ -98,6 +120,51 @@ function transport(user) {
   return { request, faults };
 }
 function settled(store) { return new Promise((resolve) => { const check = () => { if (["บันทึกแล้ว", "บันทึกไม่สำเร็จ", "ออฟไลน์"].includes(store.getSnapshot().status)) { off(); resolve(); } }; const off = store.subscribe(check); check(); }); }
+
+test("account documents sync across devices, remain private, and keep conflicting offline edits", async () => {
+  const wire = transport(alice), local = memory();
+  const a = new WorkspaceSync(alice, local, wire.request);
+  const b = new WorkspaceSync(alice, memory(), transport(alice).request);
+  const other = new WorkspaceSync(bob, memory(), transport(bob).request);
+  await a.sync(); await b.sync(); await other.sync();
+  const storageA = accountStorage(a, local), storageB = accountStorage(b, memory());
+  const key = `${a.key}.career.resume`;
+  storageA.setItem(key, '[{"id":"cv","name":"My resume"}]');
+  await settled(a); await b.sync();
+  assert.equal(storageB.getItem(key), storageA.getItem(key));
+  assert.equal(accountStorage(other, memory()).getItem(`${other.key}.career.resume`), null);
+  storageA.setItem("amaris.exam.info", '{"math":[]}');
+  await settled(a); await b.sync();
+  assert.equal(storageB.getItem("amaris.exam.info"), '{"math":[]}');
+  wire.faults.offline = true;
+  storageA.setItem(key, '"offline draft"'); await settled(a);
+  storageB.setItem(key, '"newer device"'); await settled(b);
+  wire.faults.offline = false; await a.sync();
+  assert.equal(a.getSnapshot().conflict, true);
+  assert.equal(storageA.getItem(key), '"offline draft"');
+  await b.sync(); assert.equal(storageB.getItem(key), '"newer device"');
+  a.dispose(); b.dispose(); other.dispose();
+});
+
+test("legacy import only includes the selected account and never imports credentials or journals", () => {
+  const values = new Map([
+    ["amaris.account.alice.career.goal", "{}"], ["amaris.account.bob.career.goal", "{}"],
+    ["amaris.account.alice.finance.v1", "[]"], ["amaris.account.alice.op.private", "secret"],
+    ["amaris.exam.info", "{}"], ["amaris.career.skills", "[]"], ["API_KEY", "secret"],
+  ]);
+  const storage = { length: values.size, key: i => [...values.keys()][i], getItem: key => values.get(key) ?? null };
+  assert.deepEqual(Array.from(legacyDocuments(storage, "amaris.account.alice"), row => row.id), ["career.goal", "finance.v1"]);
+  assert.deepEqual(Array.from(legacyDocuments(storage), row => row.id), ["amaris.exam.info", "career.skills"]);
+  assert.equal(values.get("API_KEY"), "secret");
+});
+
+test("identical countdown completion from two devices is acknowledged without a false conflict", async () => {
+  const data = { id: "focus-session", value: JSON.stringify({ id: "round", endedAt: 100000, elapsedMs: 60000 }) };
+  await apply(alice, [change(data.id, 0, data, "document")]);
+  await apply(alice, [change(data.id, 0, data, "document")]);
+  const row = (await snapshot(alice)).find(row => row.kind === "document" && row.id === data.id);
+  assert.equal(row.version, 1);
+});
 
 test("subject deletion and task detachment persist together after offline reload", async () => {
   const wire = transport(bob), storage = memory();

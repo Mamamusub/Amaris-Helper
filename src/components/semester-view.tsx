@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useAccountStorage } from "./account-boundary";
 import type { Subject, Task } from "@/lib/types";
 import { dayKey } from "@/lib/calendar";
 import { CHECKLIST_KEY, EXAM_CHANGED, EXAM_KEY, readExamData } from "@/lib/exam-storage";
@@ -7,18 +8,19 @@ import { DEFAULT_SEMESTER, semesterOptions, semesterSummary } from "@/lib/semest
 import { focusDuration } from "@/lib/focus-history";
 import styles from "./semester-view.module.css";
 
-function read() { try { return readExamData(localStorage); } catch { return { exams: {}, checklists: {} }; } }
 export default function SemesterView({ subjects, tasks, onStudy, onExam, loading = false }: { subjects: Subject[]; tasks: Task[]; onStudy: (id: string) => void; onExam: (id: string) => void; loading?: boolean }) {
+  const accountStorage = useAccountStorage();
+  const read = () => { try { return readExamData(accountStorage); } catch { return { exams: {}, checklists: {} }; } };
   const [semester, setSemester] = useState(DEFAULT_SEMESTER);
   const [data, setData] = useState(read);
   const [today, setToday] = useState(() => dayKey(new Date()));
   useEffect(() => {
-    const refresh = () => { setData(read()); setToday(dayKey(new Date())); };
+    const refresh = () => { setData(readExamData(accountStorage)); setToday(dayKey(new Date())); };
     const storage = (event: StorageEvent) => { if (!event.key || event.key === EXAM_KEY || event.key === CHECKLIST_KEY) refresh(); };
     const timer = setInterval(() => setToday(dayKey(new Date())), 30000);
     window.addEventListener("storage", storage); window.addEventListener(EXAM_CHANGED, refresh); window.addEventListener("focus", refresh);
     return () => { clearInterval(timer); window.removeEventListener("storage", storage); window.removeEventListener(EXAM_CHANGED, refresh); window.removeEventListener("focus", refresh); };
-  }, []);
+  }, [accountStorage]);
   const options = semesterOptions(subjects);
   const selected = options.includes(semester) ? semester : DEFAULT_SEMESTER;
   const summary = semesterSummary(subjects, tasks, data, selected, today);

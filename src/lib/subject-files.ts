@@ -1,4 +1,5 @@
-export type SubjectFile = { id: string; scope: string; subjectId: string; subjectName: string; folderId?: string | null; name: string; kind: "pdf" | "png"; size: number; createdAt: string; blob: Blob };
+import { accountFileBlob } from "./account-files";
+export type SubjectFile = { id: string; scope: string; subjectId: string; subjectName: string; folderId?: string | null; name: string; kind: "pdf" | "png"; size: number; createdAt: string; blob: Blob; remotePath?: string; ownerId?: string };
 export type SubjectFolder = { id: string; scope: string; subjectId: string; subjectName: string; parentId: string | null; name: string; createdAt: string };
 
 async function database() {
@@ -66,11 +67,12 @@ export async function fileKind(file: Blob): Promise<"pdf" | "png"> {
   if ([37,80,68,70,45].every((n, i) => bytes[i] === n)) return "pdf";
   throw new Error("รองรับเฉพาะไฟล์ PDF และ PNG ที่ถูกต้อง");
 }
-export async function fileAsPdf(file: Pick<SubjectFile, "kind" | "blob">): Promise<Blob> {
-  if (file.kind === "pdf") return new Blob([file.blob], { type: "application/pdf" });
+export async function fileAsPdf(file: Pick<SubjectFile, "kind" | "blob"> & Partial<SubjectFile>): Promise<Blob> {
+  const blob = file.remotePath ? await accountFileBlob(file as SubjectFile) : file.blob;
+  if (file.kind === "pdf") return new Blob([blob], { type: "application/pdf" });
   const { PDFDocument } = await import("pdf-lib");
   const doc = await PDFDocument.create();
-  const png = await doc.embedPng(await file.blob.arrayBuffer());
+  const png = await doc.embedPng(await blob.arrayBuffer());
   const landscape = png.width > png.height;
   const page = doc.addPage(landscape ? [841.89, 595.28] : [595.28, 841.89]);
   const scale = Math.min((page.getWidth() - 48) / png.width, (page.getHeight() - 48) / png.height);

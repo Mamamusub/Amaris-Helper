@@ -1,8 +1,7 @@
 ﻿# Google Login and account sync setup
 
-No deployment or production database change is performed by this implementation.
-Use a separate development Supabase project first. `.env.local` was not read,
-changed, copied, or committed as part of this task.
+Database migrations are not run automatically by the app or its build.
+Apply them to the Supabase project used by the deployment.
 
 ## 1. Supabase database
 
@@ -18,6 +17,47 @@ changed, copied, or committed as part of this task.
    SECURITY DEFINER functions have an empty search path and qualified table names.
 4. No Realtime publication is required. Account data polls every 5 seconds and
    refreshes on focus/online; auth is revalidated every 10 seconds and on focus.
+
+### Upgrade: all workspace data and files
+
+After the original migration, apply these **in order** in the same project:
+
+1. `supabase/migrations/202609160001_account_documents.sql`
+2. `supabase/migrations/202609160002_account_files.sql`
+
+The first adds version-checked account documents for Career, exams/checklists,
+Finance/categories, Build Lab, navigation preferences, and the active Focus timer.
+Tasks already include saved Focus history. Different edits to the same document
+produce a conflict with a retained local draft; no last-writer-wins overwrite.
+Identical writes (including simultaneous countdown completion) are idempotent.
+
+The second creates the private `workspace-files` bucket with a 25 MB per-file
+limit and owner-path read/insert policies. Study folders/files, Career files,
+and Exam attachments store metadata in workspace documents. The server verifies
+the session and expected account before issuing upload/download URLs. Uploads
+go directly to Storage so 25 MB files do not pass through the application's
+serverless request body limit. Download links expire after 60 seconds. Files
+are immutable; removing an Exam attachment hides its metadata with a tombstone.
+Unused binary objects remain private and may require a later retention cleanup.
+
+Existing data already scoped to the signed-in account migrates without replacing
+cloud values. Existing account-owned files upload in the background, retrying
+every 15 seconds while online. An upload error appears separately from document
+sync status; a queued local file is not available on another device until uploaded.
+Guest data is never automatically assigned to whichever account signs in:
+use **นำข้อมูลในเครื่องเข้าบัญชี** and **นำไฟล์ Local … เข้าบัญชี** in the sync bar
+on the original device. These copy originals and preserve existing cloud IDs.
+
+Each device must open the same deployment and sign into the same Google account.
+Wait for **บันทึกแล้ว** and for file uploading to finish before checking another
+device. Local mode remains device-only. Google Calendar OAuth connections still
+require authorization in each browser; credentials and session cookies are not
+copied as workspace data.
+
+For a fresh deployment set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and
+`APP_ORIGIN` on the server, configure Google Auth as below, and redeploy.
+The local checkout does not provide database administration credentials; apply
+the SQL through the project's SQL Editor or authenticated migration tooling.
 
 ## 2. Google Login (Supabase Auth)
 

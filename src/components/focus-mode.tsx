@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useAccountStorage } from "./account-boundary";
 import { snapshotFocus } from "@/lib/focus-history";
 import type { Subject, Task } from "@/lib/types";
 import { timerComplete, timerDisplay, finish, formatTime, focusedToday, pause, type FocusSession } from "@/lib/focus-timer";
@@ -8,8 +9,9 @@ import { Subtasks } from "./task-extras";
 import { dialogKeyboard } from "./dialog-keyboard";
 
 export default function FocusMode({ taskId, tasks, subjects = [], accountKey, open, close, save, onSessionChange }: { taskId: string | null; tasks: Task[]; subjects?: Subject[]; onSessionChange?: (session: FocusSession | null) => void; accountKey: string; open: (id: string) => void; close: () => void; save: (id: string, patch: Partial<Task>) => boolean }) {
+  const storage = useAccountStorage();
   const key = `${accountKey}.focus-session`;
-  const read = (): FocusSession | null => { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; };
+  const read = (): FocusSession | null => { const raw = storage.getItem(key); return raw ? JSON.parse(raw) : null; };
   const [session, setSession] = useState<FocusSession | null>(() => { try { return read(); } catch { return null; } });
   const publishedSession = useRef("");
   useEffect(() => {
@@ -25,24 +27,24 @@ export default function FocusMode({ taskId, tasks, subjects = [], accountKey, op
   async function mutate(change: (current: FocusSession | null) => FocusSession | null) {
     try {
       if (!navigator.locks) throw new Error("เบราว์เซอร์นี้ไม่รองรับการล็อกหลายแท็บ กรุณาใช้ Chrome, Edge หรือ Safari รุ่นใหม่");
-      await navigator.locks.request(key, () => { const current = read(); const next = session && current?.id !== session.id ? current : change(current); localStorage.setItem(key, JSON.stringify(next)); setSession(next); });
+      await navigator.locks.request(key, () => { const current = read(); const next = session && current?.id !== session.id ? current : change(current); storage.setItem(key, JSON.stringify(next)); setSession(next); });
       setError("");
     } catch (problem) { setError(problem instanceof Error ? problem.message : "บันทึกไม่ได้ กรุณาลองใหม่"); }
   }
   useEffect(() => {
-    const refresh = () => { setNow(Date.now()); try { const raw = localStorage.getItem(key); setSession(raw ? JSON.parse(raw) : null); } catch { setError("อ่านตัวจับเวลาไม่ได้ กรุณาตรวจพื้นที่จัดเก็บแล้วลองใหม่"); } };
+    const refresh = () => { setNow(Date.now()); try { const raw = storage.getItem(key); setSession(raw ? JSON.parse(raw) : null); } catch { setError("อ่านตัวจับเวลาไม่ได้ กรุณาตรวจพื้นที่จัดเก็บแล้วลองใหม่"); } };
     const timer = setInterval(refresh, 500);
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     return () => { clearInterval(timer); window.removeEventListener("storage", refresh); window.removeEventListener("focus", refresh); };
-  }, [key]);
+  }, [key, storage]);
   useEffect(() => {
     if (!session || session.endedAt || session.runningSince === null || !timerComplete(session, now)) return;
     void navigator.locks?.request(key, () => {
-      const raw = localStorage.getItem(key); const current: FocusSession | null = raw ? JSON.parse(raw) : null;
-      if (current && !current.endedAt && timerComplete(current, Date.now())) { const ended = finish(current, Date.now()); localStorage.setItem(key, JSON.stringify(ended)); setSession(ended); }
+      const raw = storage.getItem(key); const current: FocusSession | null = raw ? JSON.parse(raw) : null;
+      if (current && !current.endedAt && timerComplete(current, Date.now())) { const ended = finish(current, Date.now()); storage.setItem(key, JSON.stringify(ended)); setSession(ended); }
     }).catch(() => setError("บันทึกเวลาจบไม่สำเร็จ กดจบรอบเพื่อลองใหม่"));
-  }, [session, now, key]);
+  }, [session, now, key, storage]);
   useEffect(() => {
     if (!session?.endedAt) return;
     const task = latest.current.tasks.find((item) => item.id === session.taskId);

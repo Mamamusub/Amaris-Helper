@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { categories as defaultCategories, readCategories, changeCategory, financeMonth, money, parseAmount, readEntries, totals, validDate, type Entry } from "@/lib/finance";
 import { dayKey } from "@/lib/calendar";
-import { useCloud } from "./account-boundary";
+import { useCloud, useAccountStorage } from "./account-boundary";
 import { dialogKeyboard } from "./dialog-keyboard";
 import styles from "./finance-view.module.css";
 import FinanceCalendar from "./finance-calendar";
@@ -12,20 +12,21 @@ import FinanceCategories from "./finance-categories";
 
 type Draft = { type: Entry["type"]; amount: string; title: string; category: string; date: string; note: string };
 const fresh = (): Draft => ({ type: "expense", amount: "", title: "", category: defaultCategories.expense[0], date: dayKey(new Date()), note: "" });
-function initial(key: string) {
-  try { return { entries: readEntries(localStorage, key), error: "" }; }
+function initial(key: string, storage: Pick<Storage, "getItem">) {
+  try { return { entries: readEntries(storage, key), error: "" }; }
   catch { return { entries: [] as Entry[], error: "อ่านข้อมูลบัญชีไม่สำเร็จ กรุณาลองโหลดข้อมูลอีกครั้ง" }; }
 }
 export default function FinanceView() {
   const cloud = useCloud();
+  const storage = useAccountStorage();
   const key = `${cloud?.key ?? "agent-helper"}.finance.v1`;
   const categoryKey = `${key}.categories`;
-  const [categories, setCategories] = useState(() => { try { return readCategories(localStorage, categoryKey); } catch { return defaultCategories; } });
-  const [state, setState] = useState(() => initial(key));
-  const [month, updateMonth] = useState(() => financeMonth(localStorage, key, state.entries, dayKey(new Date()).slice(0, 7)));
+  const [categories, setCategories] = useState(() => { try { return readCategories(storage, categoryKey); } catch { return defaultCategories; } });
+  const [state, setState] = useState(() => initial(key, storage));
+  const [month, updateMonth] = useState(() => financeMonth(storage, key, state.entries, dayKey(new Date()).slice(0, 7)));
   function setMonth(value: string) {
     updateMonth(value);
-    try { localStorage.setItem(`${key}.month`, value); } catch { /* Saving an entry must not fail because of a view preference. */ }
+    try { storage.setItem(`${key}.month`, value); } catch { /* Saving an entry must not fail because of a view preference. */ }
   }
   const [filter, setFilter] = useState<"all" | Entry["type"]>("all");
   const [category, setCategory] = useState("");
@@ -37,10 +38,10 @@ export default function FinanceView() {
   const returnFocus = useRef<HTMLElement | null>(null);
   const amountInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const refresh = (event: StorageEvent) => { if (event.key === key || event.key === null) setState(initial(key)); if (event.key === categoryKey || event.key === null) { try { setCategories(readCategories(localStorage, categoryKey)); } catch { /* Keep last readable category list. */ } } };
+    const refresh = (event: StorageEvent) => { if (event.key === key || event.key === null) setState(initial(key, storage)); if (event.key === categoryKey || event.key === null) { try { setCategories(readCategories(storage, categoryKey)); } catch { /* Keep last readable category list. */ } } };
     window.addEventListener("storage", refresh);
     return () => window.removeEventListener("storage", refresh);
-  }, [key, categoryKey]);
+  }, [key, categoryKey, storage]);
   const monthly = state.entries.filter((e) => e.date.startsWith(month));
   const summary = totals(monthly);
   const shown = monthly.filter((e) => (filter === "all" || e.type === filter) && (!category || e.category === category) && `${e.title} ${e.note} ${e.category}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).sort((a, b) => b.date.localeCompare(a.date) || b.updatedAt.localeCompare(a.updatedAt));
@@ -55,7 +56,7 @@ export default function FinanceView() {
   function close() { setEditor(null); setDeleting(null); setError(""); returnFocus.current?.focus(); }
   function commit(original: Entry | null, next: Entry | null) {
     try {
-      const latest = readEntries(localStorage, key);
+      const latest = readEntries(storage, key);
       if (original && JSON.stringify(latest.find((e) => e.id === original.id)) !== JSON.stringify(original)) {
         setState({ entries: latest, error: "" });
         setError("รายการนี้เปลี่ยนในอีกแท็บแล้ว กรุณาปิดและเปิดรายการใหม่");
@@ -63,7 +64,7 @@ export default function FinanceView() {
       }
       const entries = latest.filter((e) => e.id !== original?.id);
       if (next) entries.push(next);
-      localStorage.setItem(key, JSON.stringify(entries));
+      storage.setItem(key, JSON.stringify(entries));
       setState({ entries, error: "" });
       setError("");
       return true;
@@ -87,14 +88,14 @@ export default function FinanceView() {
   function update(patch: Partial<Draft>) { setEditor((current) => current && { ...current, draft: { ...current.draft, ...patch } }); }
   function manageCategory(type: Entry["type"], name: string, remove: boolean): string | null {
     try {
-      const next = changeCategory(readCategories(localStorage, categoryKey), type, name, remove);
-      localStorage.setItem(categoryKey, JSON.stringify(next)); setCategories(next); return null;
+      const next = changeCategory(readCategories(storage, categoryKey), type, name, remove);
+      storage.setItem(categoryKey, JSON.stringify(next)); setCategories(next); return null;
     } catch (problem) { return problem instanceof Error ? problem.message : "Category update failed"; }
   }
   return <div className={`content ${styles.page}`}>
     <header className={styles.heading}><div><span className="section-kicker">PERSONAL MONEY JOURNAL</span><h2>บัญชีรายรับรายจ่าย</h2><p>เห็นเงินเข้า เงินออก และสิ่งที่ใช้ไปในแต่ละเดือน</p></div><div className={styles.actions}><label>เดือน<input aria-label="เลือกเดือน" type="month" min="1900-01" max="9999-12" value={month} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} /></label><button className="primary-button" disabled={!!state.error} onClick={() => open()}>+ เพิ่มรายการ</button></div></header>
-    <p className={styles.storage}>บันทึกในเบราว์เซอร์นี้{cloud ? " แยกตามบัญชีที่เข้าสู่ระบบ" : ""} · ยังไม่ซิงก์ข้ามอุปกรณ์</p>
-    {state.error && <div role="alert" className={styles.error}>{state.error} <button onClick={() => setState(initial(key))}>โหลดข้อมูลอีกครั้ง</button></div>}
+    <p className={styles.storage}>{cloud ? "ซิงก์รายรับรายจ่ายกับบัญชีที่เข้าสู่ระบบ · ดูสถานะด้านบน" : "บันทึกในเบราว์เซอร์นี้ · เข้าสู่ระบบเพื่อซิงก์ข้ามอุปกรณ์"}</p>
+    {state.error && <div role="alert" className={styles.error}>{state.error} <button onClick={() => setState(initial(key, storage))}>โหลดข้อมูลอีกครั้ง</button></div>}
     <div role="status" className={styles.notice}>{notice}</div>
     <div className={styles.stats}>{([["รายรับเดือนนี้", summary.income, "income"], ["รายจ่ายเดือนนี้", summary.expense, "expense"], ["คงเหลือสุทธิ", summary.balance, "balance"]] as const).map(([label, amount, tone]) => <section key={tone} className={`${styles.stat} ${styles[tone]}`}><span>{label}</span><strong>{money(amount)}</strong><small>{tone === "balance" ? "รายรับ − รายจ่าย ของเดือนที่เลือก" : `${monthly.filter((e) => e.type === tone).length} รายการ`}</small></section>)}</div>
     {!!state.entries.length && <div className={styles.savedMonths}><span>ข้อมูลที่บันทึกไว้ทั้งหมด {state.entries.length} รายการ</span><label>เดือนที่มีข้อมูล<select aria-label="ไปยังเดือนที่มีรายการบันทึก" value={state.entries.some((entry) => entry.date.startsWith(month)) ? month : ""} onChange={(event) => { if (event.target.value) { setMonth(event.target.value); setFilter("all"); setCategory(""); setSearch(""); } }}><option value="" disabled>เลือกเดือนที่มีข้อมูล</option>{[...new Set(state.entries.map((entry) => entry.date.slice(0, 7)))].sort().reverse().map((value) => <option key={value} value={value}>{value} · {state.entries.filter((entry) => entry.date.startsWith(value)).length} รายการ</option>)}</select></label></div>}
