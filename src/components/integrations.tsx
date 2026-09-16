@@ -111,8 +111,11 @@ export function CalendarReturnNotice({ onSettings }: { onSettings: () => void })
     if (!outcome) return;
     // Defer the external navigation result until the page has hydrated.
     const timer = window.setTimeout(() => {
-      setMessage(outcome === "connected" ? "Google Calendar connected. Open Calendar to view your deadlines." : outcome === "cancelled" ? "Google sign-in was cancelled." : "Google connection failed. Check setup and try again in Settings.");
+      const reason = url.searchParams.get("calendar_error");
+      const detail = reason === "database" ? "บันทึกการเชื่อมต่อไม่สำเร็จ ตรวจ Supabase RPC และ migration" : reason === "google-email" ? "ระบุอีเมลบัญชี Google ไม่สำเร็จ ตรวจ scope userinfo.email" : reason === "scopes" ? "สิทธิ์ Google ไม่ครบ ตรวจ OAuth consent screen" : reason === "refresh-token" ? "Google ไม่ส่ง refresh token กลับมา ให้เลือกบัญชีใหม่และอนุญาตอีกครั้ง" : reason === "amaris-session" || reason === "account-changed" ? "เซสชัน Amaris เปลี่ยนระหว่างอนุญาต กรุณาเข้าสู่ระบบใหม่" : reason === "state" ? "OAuth state ไม่ตรงกัน กรุณาเริ่มเชื่อมต่อใหม่" : "ตรวจ Google OAuth และลองใหม่";
+      setMessage(outcome === "connected" ? "Google Calendar connected. Open Calendar to view your deadlines." : outcome === "cancelled" ? "Google sign-in was cancelled." : `เชื่อม Google ไม่สำเร็จ: ${detail}`);
       url.searchParams.delete("calendar");
+      url.searchParams.delete("calendar_error");
       window.history.replaceState(null, "", url);
     }, 0);
     return () => window.clearTimeout(timer);
