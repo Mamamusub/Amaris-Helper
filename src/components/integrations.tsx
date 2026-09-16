@@ -46,15 +46,17 @@ export function IntegrationSettings() {
   const [primaryEmail, setPrimaryEmail] = useState("");
   async function refresh() {
     const response = await fetch("/api/integrations/status", { cache: "no-store", signal: AbortSignal.timeout(10000) });
-    if (!response.ok) throw new Error("Could not load connection status.");
-    setStatus(await response.json());
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Could not load connection status.");
+    setLoadError(""); setStatus(data);
   }
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
     fetch("/api/integrations/status", { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]) }).then(async (response) => {
-      if (!response.ok) throw new Error("Could not load connection status.");
-      const data: Status = await response.json();
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Could not load connection status.");
+      const data: Status = body;
       if (active) setStatus(data);
     }).catch(() => { if (active) setLoadError("ตรวจสถานะไม่สำเร็จ กรุณาตรวจว่าเซิร์ฟเวอร์เว็บยังทำงานอยู่ แล้วลองอีกครั้ง"); });
     fetch("/api/auth/session", { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(data => { if (active && data?.user?.email) setPrimaryEmail(data.user.email); }).catch(() => undefined);
