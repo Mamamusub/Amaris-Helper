@@ -25,7 +25,7 @@ export async function GET(request: Request) {
         const missingScopes = googleScopes.split(" ").filter(scope => !grantedScopes.includes(scope));
         if (missingScopes.length) {
           reason = "scopes";
-          console.error("Google OAuth returned incomplete scopes", { missingScopes, grantedCount: grantedScopes.length });
+          console.error("Google OAuth returned incomplete scopes", { missingScopes: missingScopes.join(", "), grantedCount: grantedScopes.length });
           throw new Error("Google returned incomplete scopes");
         }
         {
