@@ -33,6 +33,7 @@ export async function GET(request: Request) {
         }
       } catch (error) {
         if (error instanceof IntegrationError && error.status === 401) reason = "authorization";
+        console.error("Google OAuth callback failed", { reason, status: error instanceof IntegrationError ? error.status : 500 });
       }
     }
   } else reason = "state";
