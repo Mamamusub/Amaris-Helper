@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { appOrigin, calendarOwner, unseal, callbackUrl, calendarScope, calendarReadScope, cookieOptions, googleCookie, googleSheetsScope, googleToken, seal, stateCookie, authConfigured } from "@/lib/integration-server";
+import { appOrigin, calendarOwner, unseal, callbackUrl, googleScopes, cookieOptions, googleCookie, googleToken, googleEmail, saveGoogleDataConnection, seal, stateCookie, authConfigured } from "@/lib/integration-server";
 
 export async function GET(request: Request) {
   const jar = await cookies();
@@ -18,8 +18,11 @@ export async function GET(request: Request) {
         if (authConfigured() && !owner) throw new Error("Authentication required for Calendar authorization");
         if ((expectedOwner ?? "local") !== (owner ?? "local")) throw new Error("Account changed during Calendar authorization");
         const token = await googleToken({ grant_type: "authorization_code", code: params.get("code")!, redirect_uri: callbackUrl(request) });
-        if (token.refresh_token && token.scope?.split(" ").some((scope) => scope === calendarScope || scope === calendarReadScope || scope === googleSheetsScope)) {
-          jar.set(googleCookie, seal(owner ? JSON.stringify({ owner, refresh: token.refresh_token }) : token.refresh_token), cookieOptions(request));
+        if (token.refresh_token && googleScopes.split(" ").every(scope => token.scope?.split(" ").includes(scope))) {
+          if (owner) {
+            const email = await googleEmail(token.access_token);
+            await saveGoogleDataConnection(email, token.refresh_token, token.scope!.split(" "));
+          } else jar.set(googleCookie, seal(token.refresh_token), cookieOptions(request));
           result = "connected";
         }
       } catch { /* Report a generic outcome without putting credentials in the URL. */ }

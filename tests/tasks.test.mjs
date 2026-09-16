@@ -1,4 +1,4 @@
-﻿import { test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -347,4 +347,18 @@ test("Career project, resume, skill and interview detail edits survive reload", 
  h.click("Interview");h.click("Behavioral questions");h.click("Edit interview topic");h.field("STAR", "A team project");submit();
  h.refresh();h.click("Career");h.click("Portfolio");h.click("Hardware evidence");h.click("Edit project");assert.ok(h.findAll(n=>n.type === "textarea" && n.props.value === "Firmware").length);
  const resume=JSON.parse(h.storage.get("amaris.career.resume"));assert.equal(resume[0].documentUpdatedAt,"2026-09-10");assert.equal(resume[0].id,"resume-0");
+});
+
+test("Calendar selection survives reload and failed persistence keeps the selected source", () => {
+  const h = harness(); h.render(); h.click("Calendar");
+  const picker = () => h.findAll(n => n.props.id === "google-calendar-source")[0];
+  assert.equal(picker().props.value, "primary");
+  picker().props.onChange({ target: { value: "class-math@group.calendar.google.com" } }); h.render();
+  assert.equal(h.storage.get("agent-helper.google-calendar-selection"), "class-math@group.calendar.google.com");
+  assert.equal(picker().props.value, "class-math@group.calendar.google.com");
+  h.refresh(); h.click("Calendar"); assert.equal(picker().props.value, "class-math@group.calendar.google.com");
+  picker().props.onChange({ target: { value: "primary" } }); h.render(); h.refresh(); h.click("Calendar");
+  assert.equal(picker().props.value, "primary");
+  h.failWrites(); picker().props.onChange({ target: { value: "different-calendar" } }); h.render();
+  assert.equal(picker().props.value, "primary"); assert.ok(h.findAll(n => n.props.role === "alert").length);
 });

@@ -1,4 +1,4 @@
-import { accessToken, calendarEvent, checkOrigin, failure, IntegrationError, readTask, remoteFetch } from "@/lib/integration-server";
+import { accessToken, calendarEvent, checkOrigin, failure, IntegrationError, legacyAccessToken, readTask, remoteFetch } from "@/lib/integration-server";
 import type { CalendarEvent } from "@/lib/calendar";
 
 type GoogleEvent = { id?: string; status?: string; summary?: string; description?: string; htmlLink?: string; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string } };
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const task = await readTask(request);
-    const token = await accessToken();
+    const token = await legacyAccessToken();
     const response = await remoteFetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=none", {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(calendarEvent(task)),
     });

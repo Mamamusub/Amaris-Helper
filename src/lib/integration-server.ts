@@ -22,7 +22,10 @@ export const calendarScope = "https://www.googleapis.com/auth/calendar.events.ow
 export const calendarReadScope = "https://www.googleapis.com/auth/calendar.events.readonly";
 export const calendarListScope = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 export const googleSheetsScope = "https://www.googleapis.com/auth/spreadsheets.readonly";
-export const googleScopes = [calendarScope, calendarReadScope, calendarListScope, googleSheetsScope].join(" ");
+export const classroomCoursesScope = "https://www.googleapis.com/auth/classroom.courses.readonly";
+export const classroomWorkScope = "https://www.googleapis.com/auth/classroom.coursework.me.readonly";
+export const googleEmailScope = "https://www.googleapis.com/auth/userinfo.email";
+export const googleScopes = [calendarReadScope, calendarListScope, classroomCoursesScope, classroomWorkScope, googleEmailScope].join(" ");
 const configuredOrigin = () => process.env.APP_ORIGIN?.trim() ? new URL(process.env.APP_ORIGIN).origin : null;
 const requestOrigin = (request?: Request) => {
   if (!request) return null;
@@ -84,20 +87,78 @@ export async function googleToken(params: Record<string, string>) {
   const response = await remoteFetch("https://oauth2.googleapis.com/token", {
     method: "POST", body: new URLSearchParams({ ...params, client_id: process.env.GOOGLE_CLIENT_ID!, client_secret: process.env.GOOGLE_CLIENT_SECRET! }),
   });
-  if (!response.ok) throw new IntegrationError("Google authorization expired or was declined. Reconnect in Settings.", 401);
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    if (data.error === "invalid_grant") throw new IntegrationError("Google authorization expired or was declined. Reconnect in Settings.", 401);
+    throw new IntegrationError("Google token refresh failed. Check OAuth setup or try again shortly.", 502);
+  }
   return response.json() as Promise<{ access_token: string; refresh_token?: string; scope?: string }>;
 }
 
+type GoogleDataConnection = { google_email: string; refresh_token: string; scopes: string[] };
+
+async function signedInGoogleConnection(): Promise<GoogleDataConnection | null> {
+  if (!authConfigured()) return null;
+  const { client, user } = await verifiedAccount();
+  if (!user) return null;
+  const { data, error } = await client.rpc("google_data_connection");
+  if (error) throw new IntegrationError("อ่านการเชื่อมต่อ Google ไม่สำเร็จ กรุณาลองใหม่", 503);
+  const row = (Array.isArray(data) ? data[0] : data) as { google_email?: unknown; refresh_token?: unknown; scopes?: unknown } | undefined;
+  if (!row || typeof row.google_email !== "string" || typeof row.refresh_token !== "string" || !Array.isArray(row.scopes)) return null;
+  const refresh = unseal(row.refresh_token);
+  if (!refresh) throw new IntegrationError("ข้อมูลการเชื่อมต่อ Google เสียหาย กรุณาเชื่อมบัญชีใหม่", 401);
+  return { google_email: row.google_email, refresh_token: refresh, scopes: row.scopes.filter((scope): scope is string => typeof scope === "string") };
+}
+
+export async function googleDataStatus() {
+  const connection = await signedInGoogleConnection();
+  if (connection) return { connected: true, email: connection.google_email };
+  if (!authConfigured()) return { connected: Boolean(await calendarRefresh()) };
+  return { connected: false, email: null };
+}
+
+export async function saveGoogleDataConnection(email: string, refresh: string, scopes: string[]) {
+  const { client, user } = await verifiedAccount();
+  if (!user) throw new IntegrationError("เข้าสู่ระบบ Amaris ก่อนเชื่อม Google", 401);
+  const { error } = await client.rpc("google_data_upsert", { account_email: email, encrypted_refresh: seal(refresh), granted_scopes: scopes });
+  if (error) throw new IntegrationError("บันทึกการเชื่อมต่อ Google ไม่สำเร็จ กรุณาลองใหม่", 503);
+}
+
+export async function deleteGoogleDataConnection() {
+  const { client, user } = await verifiedAccount();
+  if (!user) throw new IntegrationError("เข้าสู่ระบบ Amaris ก่อนจัดการ Google", 401);
+  const { data, error } = await client.rpc("google_data_delete");
+  if (error) throw new IntegrationError("อ่านการเชื่อมต่อ Google ไม่สำเร็จ กรุณาลองใหม่", 503);
+  return typeof data === "string" ? unseal(data) : null;
+}
+
+async function refreshAccessToken(refresh: string, clear: () => Promise<void>) {
+  try { return (await googleToken({ grant_type: "refresh_token", refresh_token: refresh })).access_token; }
+  catch (error) { if (error instanceof IntegrationError && error.status === 401) await clear(); throw error; }
+}
+
 export async function accessToken() {
+  const connection = await signedInGoogleConnection();
+  if (authConfigured()) {
+    if (!connection) throw new IntegrationError("เชื่อม Google Calendar/Classroom ใน Settings ก่อน", 401);
+    return refreshAccessToken(connection.refresh_token, async () => { await deleteGoogleDataConnection(); });
+  }
+  return legacyAccessToken();
+}
+
+export async function legacyAccessToken() {
   const jar = await cookies();
   const refresh = await calendarRefresh();
   if (!refresh) throw new IntegrationError("Connect Google Calendar in Settings first.", 401);
-  try {
-    return (await googleToken({ grant_type: "refresh_token", refresh_token: refresh })).access_token;
-  } catch (error) {
-    if (error instanceof IntegrationError && error.status === 401) jar.delete(googleCookie);
-    throw error;
-  }
+  return refreshAccessToken(refresh, async () => { jar.delete(googleCookie); });
+}
+
+export async function googleEmail(access: string) {
+  const response = await remoteFetch("https://www.googleapis.com/oauth2/v2/userinfo", { headers: { Authorization: `Bearer ${access}` } });
+  if (!response.ok) throw new IntegrationError("ระบุอีเมลบัญชี Google ไม่สำเร็จ กรุณาลองเชื่อมใหม่", 502);
+  const data = await response.json() as { email?: string };
+  if (!data.email || data.email.length > 320) throw new IntegrationError("Google ไม่ได้ส่งอีเมลของบัญชีที่เชื่อมต่อ", 502);
+  return data.email;
 }
 
 export type ExportTask = { id: string; title: string; description: string; deadline: string; team: string; priority: string };

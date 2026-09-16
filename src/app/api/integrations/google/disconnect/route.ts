@@ -1,12 +1,12 @@
 import { cookies } from "next/headers";
-import { checkOrigin, failure, googleCookie, remoteFetch, calendarRefresh } from "@/lib/integration-server";
+import { authConfigured, checkOrigin, deleteGoogleDataConnection, failure, googleCookie, remoteFetch, calendarRefresh } from "@/lib/integration-server";
 
 export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const jar = await cookies();
-    const token = await calendarRefresh();
-    jar.delete(googleCookie);
+    const token = authConfigured() ? await deleteGoogleDataConnection() : await calendarRefresh();
+    if (!authConfigured()) jar.delete(googleCookie);
     let revoked = !token;
     if (token) {
       try {

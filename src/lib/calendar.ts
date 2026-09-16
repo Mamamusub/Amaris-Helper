@@ -1,6 +1,13 @@
 import type { Task } from "./types";
 
 export const calendarTimeZone = "Asia/Bangkok";
+export const calendarSelectionKey = "agent-helper.google-calendar-selection";
+export function readCalendarSelection(storage: Pick<Storage, "getItem">): string {
+  try {
+    const value = storage.getItem(calendarSelectionKey);
+    return value && value.length <= 1024 && !Array.from(value).some(char => char.charCodeAt(0) < 32) ? value : "";
+  } catch { return ""; }
+}
 
 export type CalendarEntry = { id: string; title: string; first: string; last: string; source: "google" | "task"; done: boolean; event?: CalendarEvent; task?: Task };
 
@@ -8,12 +15,14 @@ export function calendarEntries(tasks: Task[], events: CalendarEvent[]): Calenda
   // Once imported, the local task owns its title, date and status. Tombstones
   // also suppress the original event so deleting cannot resurrect an assignment.
   return [
-    ...events.filter((event) => !tasks.some((task) => task.sourceEventId === event.id)).map((event): CalendarEntry => ({ id: `event:${event.id}`, title: event.title, ...eventDays(event), source: "google", done: false, event })),
+    ...events.filter((event) => !event.noDueDate && !tasks.some((task) => task.sourceEventId === event.id)).map((event): CalendarEntry => ({ id: `event:${event.id}`, title: event.title, ...eventDays(event), source: "google", done: false, event })),
     ...tasks.filter((task) => !task.deletedAt && !!task.deadline).map((task): CalendarEntry => ({ id: task.id, title: task.title, first: task.deadline, last: task.deadline, source: "task", done: task.status === "Done", task })),
   ].sort((a, b) => a.first.localeCompare(b.first) || a.title.localeCompare(b.title));
 }
 
 export type CalendarEvent = {
+  source?: "classroom";
+  noDueDate?: boolean;
   id: string;
   title: string;
   description: string;
@@ -53,6 +62,7 @@ export function eventDays(event: CalendarEvent) {
 }
 
 export function eventDeadline(event: CalendarEvent) {
+  if (event.noDueDate) return "";
   const days = eventDays(event);
   return event.allDay ? days.last : days.first;
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Task } from "@/lib/types";
 
-type Status = { google: { configured: boolean; connected: boolean } };
+type Status = { google: { configured: boolean; connected: boolean; email?: string } };
 
 async function post(path: string, body?: unknown) {
   const response = await fetch(`/api/integrations/${path}`, {
@@ -43,6 +43,7 @@ export function IntegrationSettings() {
   const [loadError, setLoadError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [showSetup, setShowSetup] = useState(false);
+  const [primaryEmail, setPrimaryEmail] = useState("");
   async function refresh() {
     const response = await fetch("/api/integrations/status", { cache: "no-store", signal: AbortSignal.timeout(10000) });
     if (!response.ok) throw new Error("Could not load connection status.");
@@ -56,6 +57,7 @@ export function IntegrationSettings() {
       const data: Status = await response.json();
       if (active) setStatus(data);
     }).catch(() => { if (active) setLoadError("ตรวจสถานะไม่สำเร็จ กรุณาตรวจว่าเซิร์ฟเวอร์เว็บยังทำงานอยู่ แล้วลองอีกครั้ง"); });
+    fetch("/api/auth/session", { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(data => { if (active && data?.user?.email) setPrimaryEmail(data.user.email); }).catch(() => undefined);
     return () => { active = false; controller.abort(); };
   }, [attempt]);
   async function connect() {
@@ -74,15 +76,17 @@ export function IntegrationSettings() {
   }
   return <section className="integration-settings">
     <div className="panel-heading"><div><span className="eyebrow">CONNECTED APPS</span><h3>Your Google Calendar</h3></div></div>
-    <div className="integration-card"><div><h4>Google Calendar</h4><p>เลือกปฏิทินหลักหรือปฏิทินอื่น เช่น Classroom Assignments มาแสดงวันส่งงานในเว็บ</p><small>{loadError ? "ตรวจสถานะไม่สำเร็จ" : !status ? "กำลังตรวจการตั้งค่า…" : status.google.connected ? "Connected on this browser" : status.google.configured ? "Ready to connect" : "ยังตั้งค่า Google OAuth ไม่ครบ — ต้องตั้งค่าก่อนเชื่อมบัญชี"}</small></div>
-      {loadError ? <button className="secondary-button" onClick={() => { setLoadError(""); setAttempt((value) => value + 1); }}>ลองอีกครั้ง</button> : !status ? <button className="primary-button" disabled>กำลังตรวจการตั้งค่า…</button> : !status.google.configured ? <button className="primary-button" aria-expanded={showSetup} aria-controls="google-setup" onClick={() => setShowSetup((value) => !value)}>ตั้งค่า Google Calendar</button> : status.google.connected ? <button className="secondary-button" disabled={pending} onClick={disconnect}>{pending ? "Disconnecting…" : "Disconnect"}</button> : <button className="primary-button" disabled={pending} onClick={connect}>{pending ? "Connecting…" : "Connect Google Calendar"}</button>}
+    <div className="integration-card"><div><h4>Google Calendar + Classroom</h4><p>อ่าน assignment จาก Google Classroom และกิจกรรม Google Calendar ด้วยบัญชี Google แยกจากบัญชีเข้า Amaris การเชื่อมนี้อ่านอย่างเดียวและไม่เปลี่ยน Tasks หรือการส่งงานไป Calendar</p><small>{loadError ? "ตรวจสถานะไม่สำเร็จ" : !status ? "กำลังตรวจการตั้งค่า…" : status.google.connected ? `แหล่งข้อมูล: ${status.google.email || "บัญชี Google ที่เชื่อมต่อ"}` : status.google.configured ? "Ready to connect" : "ยังตั้งค่า Google OAuth ไม่ครบ — ต้องตั้งค่าก่อนเชื่อมบัญชี"}</small></div>
+      {loadError ? <button className="secondary-button" onClick={() => { setLoadError(""); setAttempt((value) => value + 1); }}>ลองอีกครั้ง</button> : !status ? <button className="primary-button" disabled>กำลังตรวจการตั้งค่า…</button> : !status.google.configured ? <button className="primary-button" aria-expanded={showSetup} aria-controls="google-setup" onClick={() => setShowSetup((value) => !value)}>ตั้งค่า Google Calendar</button> : status.google.connected ? <button className="secondary-button" disabled={pending} onClick={disconnect}>{pending ? "กำลังยกเลิก…" : "ยกเลิกการเชื่อมต่อ"}</button> : <button className="primary-button" disabled={pending} onClick={connect}>{pending ? "กำลังเชื่อมต่อ…" : "เชื่อมบัญชี Google สำหรับข้อมูล"}</button>}
     </div>
+    <div className="integration-card"><div><h4>บัญชี</h4><p>บัญชีหลักสำหรับเข้า Amaris และเป็นเจ้าของ Tasks/ข้อมูลเดิม</p><small>{primaryEmail || "ตรวจจากเซสชันที่เข้าสู่ระบบ"}</small></div>{status?.google.connected && <button className="secondary-button" disabled={pending} onClick={connect}>{pending ? "กำลังเปิด Google…" : "เปลี่ยนบัญชีแหล่งข้อมูล"}</button>}</div>
     {loadError && <p className="integration-feedback" role="alert">{loadError}</p>}
     {showSetup && <div id="google-setup" className="google-setup" lang="th">
       <h4>ตั้งค่าครั้งแรกเพื่อเชื่อมบัญชี Google</h4>
       <ol>
+        <li>เปิด Google Classroom API ใน Google Cloud โปรเจกต์เดียวกัน และเพิ่มเฉพาะ classroom.courses.readonly, classroom.coursework.me.readonly และ userinfo.email ใน OAuth consent screen</li>
         <li>เปิด <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Google Cloud → Google Calendar API</a> เลือกหรือสร้างโปรเจกต์ แล้วกด Enable</li>
-        <li>ตั้งค่า OAuth consent screen และเพิ่มอีเมลของ Pai เป็น Test user จากนั้นสร้าง OAuth Client แบบ Web application</li>
+        <li>ตั้งค่า OAuth consent screen และเพิ่มอีเมลโรงเรียน/บัญชีข้อมูลเป็น Test user จากนั้นสร้าง OAuth Client แบบ Web application</li>
         <li>เพิ่ม Authorized redirect URI เป็น URL เดียวกับที่เปิดเว็บอยู่ ตามด้วย <code>/api/integrations/google/callback</code> เช่น <code>https://your-ngrok-domain.ngrok-free.dev/api/integrations/google/callback</code></li>
         <li>เปิดไฟล์ <code>.env.local</code> ในโปรเจกต์ ใส่ <code>GOOGLE_CLIENT_ID</code> และ <code>GOOGLE_CLIENT_SECRET</code> ที่ได้จาก Google และตั้ง <code>INTEGRATION_SECRET</code> เป็นค่าสุ่มอย่างน้อย 32 ตัวอักษรตาม README</li>
         <li>หยุดเซิร์ฟเวอร์ด้วย Ctrl+C แล้วรัน <code>npm run dev</code> ใหม่ กลับมาหน้านี้และกดตรวจการตั้งค่าอีกครั้ง</li>
@@ -90,8 +94,8 @@ export function IntegrationSettings() {
       <p>ถ้าเปิดผ่าน ngrok หรือ production ให้ลงทะเบียน Redirect URI ของโดเมนนั้นใน Google Cloud ระบบจะใช้ host ของ request ปัจจุบันสำหรับ OAuth และยังรองรับ APP_ORIGIN เป็นค่า trusted origin สำรอง เก็บค่าลับในไฟล์ .env.local เท่านั้น</p>
       <button className="secondary-button" onClick={() => { setStatus(null); setLoadError(""); setAttempt((value) => value + 1); }}>ตรวจการตั้งค่าอีกครั้ง</button>
     </div>}
-    <div className="integration-actions">{status?.google.connected && <button className="secondary-button" disabled={pending} onClick={connect}>อัปเดตสิทธิ์ Google / เปลี่ยนบัญชี</button>}</div>
-    <p className="integration-feedback">ถ้าเพิ่งเพิ่มการอ่านปฏิทินอื่น ให้กดอัปเดตสิทธิ์ Google และอนุญาตรายการปฏิทินกับกิจกรรม จากนั้นเลือก Classroom Assignments ในหน้า Calendar</p>
+    <div className="integration-actions">{status?.google.connected && <button className="secondary-button" disabled={pending} onClick={connect}>อัปเดตสิทธิ์อ่าน Calendar/Classroom</button>}</div>
+    <p className="integration-feedback">การเปลี่ยนหรือยกเลิก source จะล้าง connection ฝั่ง Calendar/Classroom ทันที แต่ไม่ลบ Tasks เดิม การเชื่อมนี้ไม่ให้สิทธิ์ Sheets และไม่ใช้สำหรับส่งงานเข้า Google Calendar เดิม</p>
     <p className="integration-feedback">Open Calendar to see your events and task deadlines together. Refresh to load Google changes; assigned tasks are saved as local copies.</p>
     {message && <p className="integration-feedback" role="status">{message}</p>}
   </section>;

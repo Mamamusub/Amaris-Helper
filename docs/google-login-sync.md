@@ -100,15 +100,16 @@ Calendar client authorized redirect URIs:
 - `http://localhost:3000/api/integrations/google/callback`
 
 This is **not** the login callback. Login does not connect Calendar. Connect it
-from existing Settings separately. Calendar refresh tokens remain encrypted in
-HttpOnly cookies and include the verified Amaris user ID. The consent callback
-rejects an account switch during consent. Login/logout clear old bindings.
-Calendar authorization remains per browser: connect separately on each device.
-When Supabase auth is configured, Calendar requires a verified Amaris account and
-stores the verified user ID with the encrypted refresh token. Local mode can use
-Calendar only when Supabase auth is not configured; a local token cannot be reused
-by a logged-in account. This release does not sync credentials or write local edits
-back to Google automatically, and does not integrate Google Tasks.
+from existing Settings separately. With Supabase configured, Calendar/Classroom
+read refresh tokens are encrypted in the server-side `google_data_connections`
+table and accessed only through owner-scoped RPCs. The connected Google email is
+an identity label; the Amaris login email remains the owner of Tasks and all
+workspace data. The consent callback rejects an account switch during consent.
+Login/logout clear old browser bindings. The read-only connection is separate
+from the legacy Google Sheets and Calendar export token. Local mode can use
+Calendar only when Supabase auth is not configured; a local token cannot be
+reused by a logged-in account. This release does not sync credentials or write
+local edits back to Google automatically, and does not integrate Google Tasks.
 
 ## 4. Local development and Vercel configuration
 
@@ -125,6 +126,14 @@ intended environment. Do not prefix secrets with NEXT_PUBLIC. Configure preview
 origins explicitly if testing previews; the auth API trusts APP_ORIGIN exactly,
 not forwarded host headers. Do not deploy until the development acceptance
 checks below pass and the production migration is separately authorized.
+
+For cross-device Google Calendar/Classroom data connections, apply
+`supabase/migrations/202609160003_google_data_connection.sql` to the same
+Supabase project after the existing workspace migrations. It creates an
+owner-scoped table and three authenticated RPCs; the API does not use a service
+role key and the table is not directly readable by clients. Without Supabase
+auth and this migration, only the existing local/browser fallback is available
+and cross-device support must not be claimed.
 
 ## Behavior and data preservation
 

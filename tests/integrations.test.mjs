@@ -13,20 +13,89 @@ const env = { ...process.env, APP_ORIGIN: "http://localhost:3000", GOOGLE_CLIENT
 let mockFetch;
 let accountId = null;
 const cache = new Map();
+let dataConnection = null;
+const dataClient = { rpc: async (name, args) => {
+  if (name === "google_data_connection") return { data: dataConnection ? [dataConnection] : [], error: null };
+  if (name === "google_data_upsert") { dataConnection = { google_email: args.account_email, refresh_token: args.encrypted_refresh, scopes: args.granted_scopes }; return { data: null, error: null }; }
+  if (name === "google_data_delete") { const old = dataConnection?.refresh_token ?? null; dataConnection = null; return { data: old, error: null }; }
+  throw new Error(`Unexpected RPC ${name}`);
+} };
 function load(relativePath) {
   if (cache.has(relativePath)) return cache.get(relativePath);
   const source = fs.readFileSync(path.join(import.meta.dirname, "..", relativePath), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const testModule = { exports: {} };
-  const context = { module: testModule, exports: testModule.exports, Buffer, URL, URLSearchParams, Request, Response, AbortSignal, process: { env }, fetch: (...args) => mockFetch(...args), require: (name) => name === "./auth-server" ? { authConfigured: () => !!accountId, verifiedAccount: async () => ({ user: accountId ? { id: accountId } : null }) } : name === "next/headers" ? { cookies: async () => cookieStore } : name === "@/lib/integration-server" ? load("src/lib/integration-server.ts") : nodeRequire(name) };
+  const context = { module: testModule, exports: testModule.exports, Buffer, URL, URLSearchParams, Request, Response, AbortSignal, process: { env }, fetch: (...args) => mockFetch(...args), require: (name) => name === "./auth-server" ? { authConfigured: () => !!accountId, verifiedAccount: async () => ({ client: dataClient, user: accountId ? { id: accountId } : null }) } : name === "next/headers" ? { cookies: async () => cookieStore } : name === "@/lib/integration-server" ? load("src/lib/integration-server.ts") : name.startsWith("@/lib/") ? load(`src/lib/${name.slice(6)}.ts`) : name.startsWith("./") ? load(path.posix.join(path.posix.dirname(relativePath), `${name}.ts`)) : nodeRequire(name) };
   vm.runInNewContext(compiled, context, { filename: relativePath });
   cache.set(relativePath, testModule.exports);
   return testModule.exports;
 }
 const helpers = load("src/lib/integration-server.ts");
+const classroom = load("src/lib/classroom-server.ts");
+const feed = load("src/lib/assignment-feed.ts");
 const task = { id: "task-1", title: "Review notes", description: "@everyone study", deadline: "2026-12-31", team: "Study", priority: "High" };
 const request = (body = task, origin = env.APP_ORIGIN) => new Request(`${env.APP_ORIGIN}/api/integrations`, { method: "POST", headers: { origin, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-beforeEach(() => { accountId = null; jar.clear(); mockFetch = () => { throw new Error("Unexpected external request"); }; });
+beforeEach(() => { accountId = null; dataConnection = null; jar.clear(); mockFetch = () => { throw new Error("Unexpected external request"); }; });
+
+test("Classroom UTC deadline crosses into next Bangkok day and empty time means midnight", () => {
+  const work = { id: "w", title: "Homework", dueDate: { year: 2026, month: 9, day: 16 }, dueTime: { hours: 18 } };
+  const event = classroom.assignmentEvent({ id: "c", name: "Math" }, work);
+  assert.equal(calendar.eventDeadline(event), "2026-09-17");
+  assert.equal(event.start, "2026-09-16T18:00:00.000Z");
+  assert.equal(classroom.assignmentEvent({ id: "c", name: "Math" }, { ...work, dueTime: {} }).start, "2026-09-16T00:00:00.000Z");
+  const undated = classroom.assignmentEvent({ id: "c", name: "Math" }, { id: "u", title: "Reading" });
+  assert.equal(calendar.eventDeadline(undated), "");
+  assert.equal(calendar.calendarEntries([], [undated]).length, 0);
+});
+
+test("OAuth rejects partial scopes and transient refresh errors preserve credentials", async () => {
+  jar.set(helpers.stateCookie, "expected");
+  mockFetch = async () => Response.json({ refresh_token: "r", scope: helpers.calendarScope });
+  const response = await load("src/app/api/integrations/google/callback/route.ts").GET(new Request(`${env.APP_ORIGIN}/api/integrations/google/callback?state=expected&code=x`));
+  assert.match(response.headers.get("location"), /calendar=failed/);
+  jar.set(helpers.googleCookie, helpers.seal("refresh"));
+  mockFetch = async () => Response.json({ error: "temporarily_unavailable" }, { status: 503 });
+  await assert.rejects(helpers.accessToken(), /refresh failed/);
+  assert.ok(jar.has(helpers.googleCookie));
+  mockFetch = async () => Response.json({ error: "invalid_grant" }, { status: 400 });
+  await assert.rejects(helpers.accessToken(), /expired/);
+  assert.equal(jar.has(helpers.googleCookie), false);
+});
+
+test("Classroom route refreshes OAuth, follows course/work pages, maps and deduplicates assignments", async () => {
+  jar.set(helpers.googleCookie, helpers.seal("refresh"));
+  const work = { id: "w", title: "Homework", state: "PUBLISHED", alternateLink: "https://classroom.google.com/c/abc/a/def/details", dueDate: { year: 2026, month: 9, day: 16 }, dueTime: { hours: 18 } };
+  const calls = [];
+  mockFetch = async (url, options) => {
+    calls.push(url);
+    if (url.includes("oauth2")) return Response.json({ access_token: "access" });
+    assert.equal(options.headers.Authorization, "Bearer access");
+    const parsed = new URL(url);
+    if (parsed.pathname === "/v1/courses") {
+      assert.equal(parsed.searchParams.get("studentId"), "me");
+      return Response.json(parsed.searchParams.has("pageToken") ? { courses: [] } : { courses: [{ id: "c", name: "Math" }], nextPageToken: "courses2" });
+    }
+    return Response.json(parsed.searchParams.has("pageToken") ? { courseWork: [work, { id: "u", title: "Read", state: "PUBLISHED" }] } : { courseWork: [work], nextPageToken: "work2" });
+  };
+  const route = load("src/app/api/integrations/google/classroom/route.ts");
+  const response = await route.GET(new Request(`${env.APP_ORIGIN}/api/integrations/google/classroom?from=2026-09-17&to=2026-09-18`));
+  assert.equal(response.status, 200);
+  const { events } = await response.json();
+  assert.equal(events.length, 2);
+  assert.equal(calls.length, 5);
+  const duplicate = { ...events[0], id: "calendar-copy", source: undefined, description: `<a href="${work.alternateLink}">Assignment</a>` };
+  assert.equal(feed.mergeAssignmentEvents([duplicate], events).length, 2);
+  const unrelated = { ...duplicate, id: "unrelated", url: undefined, description: "same title only" };
+  assert.equal(feed.mergeAssignmentEvents([unrelated], events).length, 3);
+  assert.equal(calendar.calendarEntries([{ sourceEventId: events[0].id, deletedAt: "now" }], events).length, 0);
+});
+
+test("Classroom permission failure is visible and Calendar still loads", async () => {
+  mockFetch = async url => url.includes("/classroom?") ? Response.json({ error: "Enable Classroom API" }, { status: 401 }) : Response.json({ events: [{ id: "calendar-event", description: "" }] });
+  const result = await feed.loadAssignmentFeed(new URLSearchParams({ from: "2026-09-01", to: "2026-10-01" }), AbortSignal.timeout(1000));
+  assert.equal(result.events.length, 1);
+  assert.match(result.warning, /Enable Classroom/);
+});
 
 test("encrypted credentials round-trip and reject tampering", () => {
   const sealed = helpers.seal("private-refresh-token");
@@ -61,7 +130,7 @@ test("OAuth callback rejects mismatched state without exchanging a token", async
 });
 test("OAuth callback stores only encrypted refresh credentials", async () => {
   jar.set(helpers.stateCookie, "expected");
-  mockFetch = async () => Response.json({ access_token: "access", refresh_token: "refresh", scope: helpers.calendarScope });
+  mockFetch = async () => Response.json({ access_token: "access", refresh_token: "refresh", scope: helpers.googleScopes });
   const result = await load("src/app/api/integrations/google/callback/route.ts").GET(new Request(`${env.APP_ORIGIN}/api/integrations/google/callback?state=expected&code=secret`));
   assert.match(result.headers.get("location"), /calendar=connected/);
   assert.equal(helpers.unseal(jar.get(helpers.googleCookie)), "refresh");
@@ -154,7 +223,34 @@ test("Google connect requests read access for subscribed calendars and account s
   const scopes = url.searchParams.get("scope").split(" ");
   assert.ok(scopes.includes(helpers.calendarReadScope));
   assert.ok(scopes.includes(helpers.calendarListScope));
+  assert.ok(scopes.includes(helpers.googleEmailScope));
+  assert.ok(!scopes.includes(helpers.calendarScope));
+  assert.ok(!scopes.includes(helpers.googleSheetsScope));
   assert.match(url.searchParams.get("prompt"), /select_account/);
+});
+test("Amaris owner keeps the same account while Google data source changes from B to C", async () => {
+  accountId = "amaris-owner";
+  const callback = load("src/app/api/integrations/google/callback/route.ts");
+  async function connect(email) {
+    jar.set(helpers.stateCookie, "expected");
+    jar.set("pai-google-owner", helpers.seal(accountId));
+    mockFetch = async url => url.includes("oauth2.googleapis.com/token")
+      ? Response.json({ access_token: "access", refresh_token: `refresh-${email}`, scope: helpers.googleScopes })
+      : Response.json({ email });
+    const result = await callback.GET(new Request(`${env.APP_ORIGIN}/api/integrations/google/callback?state=expected&code=code`));
+    assert.match(result.headers.get("location"), /calendar=connected/);
+  }
+  await connect("school-b@example.test");
+  assert.equal((await load("src/app/api/integrations/status/route.ts").GET()).json ? (await (await load("src/app/api/integrations/status/route.ts").GET()).json()).google.email : "", "school-b@example.test");
+  await connect("school-c@example.test");
+  const status = await (await load("src/app/api/integrations/status/route.ts").GET()).json();
+  assert.deepEqual(status.google, { configured: true, connected: true, email: "school-c@example.test" });
+  assert.equal(helpers.unseal(dataConnection.refresh_token), "refresh-school-c@example.test");
+  assert.equal(accountId, "amaris-owner");
+  mockFetch = async url => url.includes("oauth2.googleapis.com/revoke") ? new Response(null, { status: 200 }) : Response.json({});
+  assert.equal((await load("src/app/api/integrations/google/disconnect/route.ts").POST(request())).status, 200);
+  assert.equal(dataConnection, null);
+  assert.equal(accountId, "amaris-owner");
 });
 test("calendar list includes subscribed Classroom calendars across pages", async () => {
   jar.set(helpers.googleCookie, helpers.seal("refresh"));
@@ -218,4 +314,12 @@ test("Calendar callback rejects an account switch during consent", async () => {
   const result = await route.GET(new Request(`${env.APP_ORIGIN}/api/integrations/google/callback?state=valid-state&code=test`));
   assert.match(result.headers.get("location"), /calendar=failed/);
   assert.equal(jar.has(helpers.googleCookie), false);
+});
+
+test("stored calendar selection accepts explicit IDs and rejects damaged values", () => {
+  const { readCalendarSelection, calendarSelectionKey } = load("src/lib/calendar.ts");
+  assert.equal(calendarSelectionKey, "agent-helper.google-calendar-selection");
+  for (const value of [null, "", "x".repeat(1025), "bad\ncalendar"]) assert.equal(readCalendarSelection({ getItem: () => value }), "");
+  for (const value of ["primary", "math@group.calendar.google.com"]) assert.equal(readCalendarSelection({ getItem: () => value }), value);
+  assert.equal(readCalendarSelection({ getItem: () => { throw Error("blocked"); } }), "");
 });

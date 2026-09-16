@@ -1,13 +1,15 @@
 "use client";
 
-import { useContext, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useContext, useEffect, useState, type CSSProperties } from "react";
 import { agents, getAgent } from "@/lib/agents";
 import { CalendarEvent, calendarTimeZone, dayKey, calendarEntries, eventDeadline, eventTaskId, monthDays, shiftDay, shiftMonth } from "@/lib/calendar";
 import type { Subject, Task } from "@/lib/types";
 
 import { TaskContext, TaskControls } from "@/components/task-controls";
 
-type LoadResult = { key: string; events: CalendarEvent[]; error?: string; connect?: boolean };
+import { loadAssignmentFeed } from "@/lib/assignment-feed";
+
+type LoadResult = { key: string; events: CalendarEvent[]; error?: string; warning?: string; connect?: boolean };
 type GoogleCalendar = { id: string; name: string; primary: boolean; selected: boolean };
 const weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const dateLabel = (day: string) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" }).format(new Date(`${day}T12:00:00Z`));
@@ -21,10 +23,9 @@ export default function DeadlineCalendar({ selectedCalendarId, onCalendarSelecte
   const [filter, setFilter] = useState<"all" | "google" | "task">("all");
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<LoadResult>({ key: "", events: [] });
-  const [calendarId, setCalendarId] = useState(selectedCalendarId || "primary");
+  const calendarId = selectedCalendarId || "primary";
   const [calendarList, setCalendarList] = useState<{ items: GoogleCalendar[]; error?: string } | null>(null);
-  const selectionInitialized = useRef(false);
-  const selectedCalendar = calendarList?.items.find((calendar) => calendar.primary ? calendarId === "primary" : calendar.id === calendarId);
+  const selectedCalendar = calendarList?.items.find((calendar) => calendar.id === calendarId || (calendar.primary && calendarId === "primary"));
   const calendarName = selectedCalendar?.name ?? (calendarId === "primary" ? "Primary calendar" : "Selected calendar");
   const days = monthDays(month);
   const from = days[0];
@@ -41,22 +42,16 @@ export default function DeadlineCalendar({ selectedCalendarId, onCalendarSelecte
         if (!response.ok) { setCalendarList({ items: [], error: data.error || "โหลดรายชื่อปฏิทินไม่สำเร็จ" }); return; }
         const items = data.calendars as GoogleCalendar[];
         setCalendarList({ items });
-        if (!selectionInitialized.current) {
-          const classroom = items.find((calendar) => /classroom\s*assignments/i.test(calendar.name));
-          if (!selectedCalendarId && classroom && !classroom.primary) { setCalendarId(classroom.id); onCalendarSelected(classroom.id); }
-          selectionInitialized.current = true;
-        }
       }).catch(() => { if (!controller.signal.aborted) setCalendarList({ items: [], error: "โหลดรายชื่อปฏิทินไม่สำเร็จ กด Refresh เพื่อลองอีกครั้ง" }); });
     return () => controller.abort();
-  }, [revision, selectedCalendarId, onCalendarSelected]);
+  }, [revision]);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/integrations/google/events?${new URLSearchParams({ from, to, calendarId })}`, { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]) })
-      .then(async (response) => {
-        const data = await response.json();
+    loadAssignmentFeed(new URLSearchParams({ from, to, calendarId }), AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]))
+      .then((data) => {
         if (controller.signal.aborted) return;
-        setResult(response.ok ? { key: requestKey, events: data.events } : { key: requestKey, events: [], error: data.error || "Could not load calendar.", connect: response.status === 401 || response.status === 503 });
+        setResult({ key: requestKey, events: data.events, warning: data.warning });
       })
       .catch(() => { if (!controller.signal.aborted) setResult({ key: requestKey, events: [], error: "Could not reach Google Calendar. Your local tasks are still shown." }); });
     return () => controller.abort();
@@ -86,9 +81,13 @@ export default function DeadlineCalendar({ selectedCalendarId, onCalendarSelecte
       <div><span className="calendar-stat-icon" aria-hidden="true">▦</span><div><strong>{monthly.length}</strong><small>items this month</small></div></div>
       <div><span className="calendar-stat-icon peach" aria-hidden="true">↗</span><div><strong>{month === today.slice(0, 7) ? upcoming.length : "—"}</strong><small>coming in 7 days</small></div></div>
       <div><span className="calendar-stat-icon lilac" aria-hidden="true">✓</span><div><strong>{monthly.filter((entry) => entry.done).length}</strong><small>completed tasks</small></div></div>
-      <div className="calendar-source"><span className="status-dot" /><div><strong>{loading ? "Loading Google Calendar…" : result.error ? "Local tasks available" : "Google Calendar loaded"}</strong><small>{calendarName} · Bangkok time</small></div></div>
+      <div className="calendar-source"><span className="status-dot" /><div><strong>{loading ? "Loading Google Calendar…" : (result.error || result.warning) ? "Google sync needs attention" : "Google Calendar + Classroom loaded"}</strong><small>{calendarName} · Bangkok time</small></div></div>
     </div>
-    <div className="calendar-picker"><label htmlFor="google-calendar-source">Google calendar<select id="google-calendar-source" value={calendarId} onChange={(event) => { setCalendarId(event.target.value); onCalendarSelected(event.target.value); }}><option value="primary">{calendarList?.items.find((calendar) => calendar.primary)?.name ?? "Primary calendar"} (Primary)</option>{calendarList?.items.filter((calendar) => !calendar.primary).map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.name}</option>)}</select></label><div><small>{calendarList?.items.find((calendar) => calendar.primary)?.id ?? "เลือกปฏิทินเดียวกับที่เก็บกิจกรรมใน Google"}</small><p>{loading ? "กำลังโหลดกิจกรรม…" : result.error ? "ยังโหลดกิจกรรมจากปฏิทินนี้ไม่สำเร็จ" : `${events.length} กิจกรรมจาก Google ในช่วง ${from} ถึง ${shiftDay(to, -1)}`}</p></div></div>
+    <div className="calendar-picker"><label htmlFor="google-calendar-source">Google calendar<select id="google-calendar-source" value={calendarId} onChange={(event) => { onCalendarSelected(event.target.value); }}><option value="primary">{calendarList?.items.find((calendar) => calendar.primary)?.name ?? "Primary calendar"} (Primary)</option>{calendarList?.items.filter((calendar) => !calendar.primary).map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.name}</option>)}{calendarId !== "primary" && !selectedCalendar && <option value={calendarId}>Saved calendar (not in current account list)</option>}</select></label><div><small>Calendar ID: {selectedCalendar?.id ?? calendarId}</small><br /><small>บัญชี Google Calendar: {calendarList?.items.find(calendar => calendar.primary)?.id ?? "ยังระบุไม่ได้"}</small><p>{loading ? "กำลังโหลดกิจกรรม…" : (result.error || result.warning) ? "โหลดข้อมูล Google ยังไม่ครบ ดูข้อความด้านล่าง" : `${events.length} กิจกรรมจาก Google ในช่วง ${from} ถึง ${shiftDay(to, -1)}`}</p></div></div>
+    <p className="integration-feedback">งานจาก Classroom ของทุกวิชาที่กำลังเรียนจะแสดงอัตโนมัติ พร้อมกิจกรรมจากปฏิทินที่เลือก กด Refresh เพื่ออ่านข้อมูลล่าสุด งานที่บันทึกเป็น My tasks แล้วใช้วันส่งและสถานะที่แก้ในเว็บ</p>
+    {!loading && result.warning && <p role="status" className="integration-feedback">{result.warning} <button onClick={onSettings}>Settings</button></p>}
+    {events.some(event => event.noDueDate) && <div className="integration-feedback"><strong>Classroom · ไม่มีกำหนดส่ง</strong>{events.filter(event => event.noDueDate).map(event => <p key={event.id}>{event.url ? <a href={event.url} target="_blank" rel="noreferrer">{event.title}</a> : event.title}</p>)}</div>}
+    {calendarList && !calendarList.error && calendarId !== "primary" && !selectedCalendar && <p className="integration-feedback" role="alert">ปฏิทินที่บันทึกไว้ไม่อยู่ในรายการบัญชี Google ที่เชื่อมต่อ ตรวจบัญชีใน Settings หรือเลือกปฏิทินใหม่ ระบบจะไม่เปลี่ยนไปอ่านปฏิทินอื่นเอง</p>}
     {calendarList?.error && <div className="calendar-connection" role="status"><div><strong>เลือกปฏิทินอื่น เช่น Classroom Assignments</strong><p>{calendarList.error}</p></div><button className="secondary-button" onClick={onSettings}>ไป Settings</button></div>}
     {!loading && result.error && <div className="calendar-connection" role="status"><div><strong>{result.connect ? "Bring your Google Calendar here" : "Calendar could not refresh"}</strong><p>{result.error}</p></div><button className="secondary-button" onClick={result.connect ? onSettings : () => setRevision((value) => value + 1)}>{result.connect ? "Connect in Settings ↗" : "Try again"}</button></div>}
     <div className="calendar-layout">
@@ -106,11 +105,11 @@ export default function DeadlineCalendar({ selectedCalendarId, onCalendarSelecte
         <div className="calendar-legend"><span><i className="google" /> Google events</span><span><i className="task" /> Task deadlines</span><small>Asia/Bangkok · UTC+7</small></div>
       </section>
       <aside className="calendar-agenda"><div className="agenda-heading"><span className="eyebrow">YOUR DAY, AT A GLANCE</span><h3>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${selectedDay}T12:00:00Z`))}<span>{selected.length} items</span></h3><p>{dateLabel(selectedDay)}</p></div>
-        {selected.length === 0 ? <div className="agenda-empty"><span aria-hidden="true">✧</span><h4>A little breathing room.</h4><p>{loading ? "Loading Google events. Your local deadlines are already here." : "No items on this day. Pick another date to see what’s coming."}</p></div> : <div className="agenda-items">{selected.map((entry) => <article key={entry.id} style={taskColorStyle(entry.task)} data-go-lesson={entry.task?.recurrence === "go-kus-thursday" || undefined} className={`agenda-item ${entry.source}`}><span className="agenda-tag">{entry.source === "google" ? "GOOGLE CALENDAR" : entry.task?.team.toUpperCase()}{entry.done ? " · DONE" : ""}</span><h4>{entry.title}</h4><p className="agenda-time">{entry.event ? entry.event.allDay ? "All day" : new Intl.DateTimeFormat("en-US", { timeZone: calendarTimeZone, hour: "numeric", minute: "2-digit" }).format(new Date(entry.event.start)) : "Deadline"}{entry.first !== entry.last ? ` · ${entry.first} → ${entry.last}` : ""}</p>
+        {selected.length === 0 ? <div className="agenda-empty"><span aria-hidden="true">✧</span><h4>A little breathing room.</h4><p>{loading ? "Loading Google events. Your local deadlines are already here." : "No items on this day. Pick another date to see what’s coming."}</p></div> : <div className="agenda-items">{selected.map((entry) => <article key={entry.id} style={taskColorStyle(entry.task)} data-go-lesson={entry.task?.recurrence === "go-kus-thursday" || undefined} className={`agenda-item ${entry.source}`}><span className="agenda-tag">{entry.source === "google" ? (entry.event?.source === "classroom" ? "CLASSROOM" : "GOOGLE CALENDAR") : entry.task?.team.toUpperCase()}{entry.done ? " · DONE" : ""}</span><h4>{entry.title}</h4><p className="agenda-time">{entry.event ? entry.event.allDay ? "All day" : new Intl.DateTimeFormat("en-US", { timeZone: calendarTimeZone, hour: "numeric", minute: "2-digit" }).format(new Date(entry.event.start)) : "Deadline"}{entry.first !== entry.last ? ` · ${entry.first} → ${entry.last}` : ""}</p>
           {(entry.event?.description || entry.task?.description) && <p className="agenda-description">{entry.event?.description || entry.task?.description}</p>}
           {entry.task && <TaskControls task={entry.task} />}{entry.task && <div className="agenda-assigned"><span>{getAgent(entry.task.assignedAgent)?.avatar ?? "🐼"}</span><small>{getAgent(entry.task.assignedAgent)?.name ?? "Panda"} · {entry.task.status}<br />Task due {entry.task.deadline}</small></div>}
           {entry.event && !entry.task && <AssignEvent event={entry.event} subjects={subjects} onCreateTask={onCreateTask} />}
-          {entry.event?.url && <a className="calendar-google-link" href={entry.event.url} target="_blank" rel="noreferrer">Open in Google Calendar ↗</a>}
+          {entry.event?.url && <a className="calendar-google-link" href={entry.event.url} target="_blank" rel="noreferrer">{entry.event.source === "classroom" ? "Open in Classroom ↗" : "Open in Google Calendar ↗"}</a>}
         </article>)}</div>}
         <button className="primary-button" onClick={() => actions.create(undefined, selectedDay)}>+ New task</button><div className="agenda-note"><span aria-hidden="true">✦</span><p>Pick a Google event and assign it to your team. Its deadline becomes a task you can track.</p></div>
       </aside>

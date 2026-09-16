@@ -19,7 +19,7 @@ import SemesterView from "./semester-view";
 
 import { TaskContext, TaskControls, TaskEditor } from "@/components/task-controls";
 import { liveTasks, todayTasks, updateTask, migrateTasks, sortTasksByDeadline, detachSubject } from "@/lib/task-model";
-import { dayKey, calendarTimeZone } from "@/lib/calendar";
+import { dayKey, calendarTimeZone, calendarSelectionKey, readCalendarSelection } from "@/lib/calendar";
 
 import AccountBoundary, { useCloud, useCloudSnapshot, useAccountStorage } from "@/components/account-boundary";
 
@@ -79,7 +79,17 @@ function LoadedAppShell() {
     try { accountStorage.setItem("agent-helper.hidden-nav", JSON.stringify(next)); setHiddenNav(next); setNavError(""); }
     catch { setNavError("บันทึกเมนูไม่สำเร็จ กรุณาตรวจพื้นที่จัดเก็บของเบราว์เซอร์แล้วลองอีกครั้ง"); }
   }
-  const [calendarId, setCalendarId] = useState("");
+  const [calendarId, setCalendarId] = useState(() => readCalendarSelection(accountStorage));
+  const [calendarError, setCalendarError] = useState("");
+  function selectCalendar(id: string) {
+    try { accountStorage.setItem(calendarSelectionKey, id); setCalendarId(id); setCalendarError(""); }
+    catch { setCalendarError("บันทึกปฏิทินที่เลือกไม่สำเร็จ กรุณาลองอีกครั้ง"); }
+  }
+  useEffect(() => {
+    const refresh = () => setCalendarId(readCalendarSelection(accountStorage));
+    window.addEventListener("storage", refresh);
+    return () => window.removeEventListener("storage", refresh);
+  }, [accountStorage]);
   const [localTasks, setTasks] = useState<Task[]>(() => cloud ? [] : migrateTasks(readStorage(storageKeys.tasks, demoTasks), readStorage(storageKeys.subjects, demoSubjects)));
   useEffect(() => {
     if (cloud) return;
@@ -209,7 +219,7 @@ function LoadedAppShell() {
       {view === "career" && <CareerView target={careerTarget} onAddTask={(task) => storedTasks.some(item => item.id === task.id) || commitTasks([task, ...storedTasks])} tasks={storedTasks} onCreateTask={() => { const now = new Date().toISOString(); setEditorVersion(0); setEditor({ id: crypto.randomUUID(), title: "", description: "", team: "Career", assignedAgent: "secretary", status: "Planned", priority: "Medium", deadline: "", focused: true, createdAt: now, updatedAt: now }); }}><div className="agent-cards wide">{agents.filter((agent) => agent.team === "Career").map((agent) => <AgentCard key={agent.id} agent={agent} onClick={() => openAgent(agent)} />)}</div></CareerView>}
       {view === "development" && <BuildLab />}
       {view === "storage" && <StorageView key={cloud?.key ?? "local"} scope={cloud?.key ?? "local"} subjects={subjects} />}
-      {view === "calendar" && <DeadlineCalendar selectedCalendarId={calendarId} onCalendarSelected={setCalendarId} tasks={storedTasks} subjects={subjects} onCreateTask={addTask} onAssignAll={assignCalendarEvents} onSettings={() => setView("settings")} />}
+      {view === "calendar" && <>{calendarError && <p role="alert">{calendarError}</p>}<DeadlineCalendar selectedCalendarId={calendarId} onCalendarSelected={selectCalendar} tasks={storedTasks} subjects={subjects} onCreateTask={addTask} onAssignAll={assignCalendarEvents} onSettings={() => setView("settings")} /></>}
       {view === "port" && <PortView />}
       {view === "finance" && <FinanceView />}
       {view === "settings" && <SettingsView hiddenNav={hiddenNav} onChangeNavigation={saveNavigation} navError={navError} />}
