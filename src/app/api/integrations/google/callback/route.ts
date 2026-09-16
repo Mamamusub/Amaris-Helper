@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { appOrigin, calendarOwner, unseal, callbackUrl, googleScopes, cookieOptions, googleCookie, googleToken, googleEmail, saveGoogleDataConnection, seal, stateCookie, authConfigured, IntegrationError } from "@/lib/integration-server";
+import { appOrigin, calendarOwner, unseal, callbackUrl, cookieOptions, googleCookie, googleScopes, googleToken, seal, stateCookie, authConfigured, IntegrationError } from "@/lib/integration-server";
 
 export async function GET(request: Request) {
   const jar = await cookies();
@@ -28,15 +28,8 @@ export async function GET(request: Request) {
           console.error("Google OAuth returned incomplete scopes", { missingScopes: missingScopes.join(", "), grantedCount: grantedScopes.length });
           throw new Error("Google returned incomplete scopes");
         }
-        {
-          if (owner) {
-            reason = "google-email";
-            const email = await googleEmail(token.access_token);
-            reason = "database";
-            await saveGoogleDataConnection(email, token.refresh_token, token.scope!.split(" "));
-          } else jar.set(googleCookie, seal(token.refresh_token), cookieOptions(request));
-          result = "connected";
-        }
+        jar.set(googleCookie, seal(owner ? JSON.stringify({ owner, refresh: token.refresh_token }) : token.refresh_token), cookieOptions(request));
+        result = "connected";
       } catch (error) {
         if (error instanceof IntegrationError && error.status === 401) reason = "authorization";
         console.error("Google OAuth callback failed", { reason, status: error instanceof IntegrationError ? error.status : 500 });

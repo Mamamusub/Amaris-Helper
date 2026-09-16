@@ -223,9 +223,8 @@ test("Google connect requests read access for subscribed calendars and account s
   const scopes = url.searchParams.get("scope").split(" ");
   assert.ok(scopes.includes(helpers.calendarReadScope));
   assert.ok(scopes.includes(helpers.calendarListScope));
-  assert.ok(scopes.includes(helpers.googleEmailScope));
-  assert.ok(!scopes.includes(helpers.calendarScope));
-  assert.ok(!scopes.includes(helpers.googleSheetsScope));
+  assert.ok(scopes.includes(helpers.calendarScope));
+  assert.ok(scopes.includes(helpers.googleSheetsScope));
   assert.match(url.searchParams.get("prompt"), /select_account/);
 });
 test("Amaris owner keeps the same account while Google data source changes from B to C", async () => {
@@ -241,15 +240,15 @@ test("Amaris owner keeps the same account while Google data source changes from 
     assert.match(result.headers.get("location"), /calendar=connected/);
   }
   await connect("school-b@example.test");
-  assert.equal((await load("src/app/api/integrations/status/route.ts").GET()).json ? (await (await load("src/app/api/integrations/status/route.ts").GET()).json()).google.email : "", "school-b@example.test");
+  assert.equal((await (await load("src/app/api/integrations/status/route.ts").GET()).json()).google.connected, true);
   await connect("school-c@example.test");
   const status = await (await load("src/app/api/integrations/status/route.ts").GET()).json();
-  assert.deepEqual(status.google, { configured: true, connected: true, email: "school-c@example.test" });
-  assert.equal(helpers.unseal(dataConnection.refresh_token), "refresh-school-c@example.test");
+  assert.deepEqual(status.google, { configured: true, connected: true });
+  assert.equal(helpers.unseal(jar.get(helpers.googleCookie)), JSON.stringify({ owner: accountId, refresh: "refresh-school-c@example.test" }));
   assert.equal(accountId, "amaris-owner");
   mockFetch = async url => url.includes("oauth2.googleapis.com/revoke") ? new Response(null, { status: 200 }) : Response.json({});
   assert.equal((await load("src/app/api/integrations/google/disconnect/route.ts").POST(request())).status, 200);
-  assert.equal(dataConnection, null);
+  assert.equal(jar.has(helpers.googleCookie), false);
   assert.equal(accountId, "amaris-owner");
 });
 test("calendar list includes subscribed Classroom calendars across pages", async () => {

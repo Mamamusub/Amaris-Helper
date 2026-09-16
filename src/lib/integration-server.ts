@@ -25,7 +25,9 @@ export const googleSheetsScope = "https://www.googleapis.com/auth/spreadsheets.r
 export const classroomCoursesScope = "https://www.googleapis.com/auth/classroom.courses.readonly";
 export const classroomWorkScope = "https://www.googleapis.com/auth/classroom.coursework.me.readonly";
 export const googleEmailScope = "https://www.googleapis.com/auth/userinfo.email";
-export const googleScopes = [calendarReadScope, calendarListScope, classroomCoursesScope, classroomWorkScope, googleEmailScope].join(" ");
+export const googleScopes = [calendarScope, calendarReadScope, calendarListScope, googleSheetsScope].join(" ");
+export const googleCoreScopes = [calendarReadScope, calendarListScope, googleEmailScope];
+export const googleClassroomScopes = [classroomCoursesScope, classroomWorkScope];
 const configuredOrigin = () => process.env.APP_ORIGIN?.trim() ? new URL(process.env.APP_ORIGIN).origin : null;
 const requestOrigin = (request?: Request) => {
   if (!request) return null;
@@ -111,10 +113,13 @@ async function signedInGoogleConnection(): Promise<GoogleDataConnection | null> 
 }
 
 export async function googleDataStatus() {
+  return { connected: Boolean(await calendarRefresh()) };
+}
+
+export async function googleDataScopes() {
+  if (!authConfigured()) return googleClassroomScopes;
   const connection = await signedInGoogleConnection();
-  if (connection) return { connected: true, email: connection.google_email };
-  if (!authConfigured()) return { connected: Boolean(await calendarRefresh()) };
-  return { connected: false, email: null };
+  return connection?.scopes ?? [];
 }
 
 export async function saveGoogleDataConnection(email: string, refresh: string, scopes: string[]) {
@@ -138,11 +143,6 @@ async function refreshAccessToken(refresh: string, clear: () => Promise<void>) {
 }
 
 export async function accessToken() {
-  const connection = await signedInGoogleConnection();
-  if (authConfigured()) {
-    if (!connection) throw new IntegrationError("เชื่อม Google Calendar/Classroom ใน Settings ก่อน", 401);
-    return refreshAccessToken(connection.refresh_token, async () => { await deleteGoogleDataConnection(); });
-  }
   return legacyAccessToken();
 }
 

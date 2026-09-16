@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Task } from "@/lib/types";
 
-type Status = { google: { configured: boolean; connected: boolean; email?: string } };
+type Status = { google: { configured: boolean; connected: boolean; email?: string; classroom?: boolean } };
 
 async function post(path: string, body?: unknown) {
   const response = await fetch(`/api/integrations/${path}`, {
@@ -78,7 +78,7 @@ export function IntegrationSettings() {
   }
   return <section className="integration-settings">
     <div className="panel-heading"><div><span className="eyebrow">CONNECTED APPS</span><h3>Your Google Calendar</h3></div></div>
-    <div className="integration-card"><div><h4>Google Calendar + Classroom</h4><p>อ่าน assignment จาก Google Classroom และกิจกรรม Google Calendar ด้วยบัญชี Google แยกจากบัญชีเข้า Amaris การเชื่อมนี้อ่านอย่างเดียวและไม่เปลี่ยน Tasks หรือการส่งงานไป Calendar</p><small>{loadError ? "ตรวจสถานะไม่สำเร็จ" : !status ? "กำลังตรวจการตั้งค่า…" : status.google.connected ? `แหล่งข้อมูล: ${status.google.email || "บัญชี Google ที่เชื่อมต่อ"}` : status.google.configured ? "Ready to connect" : "ยังตั้งค่า Google OAuth ไม่ครบ — ต้องตั้งค่าก่อนเชื่อมบัญชี"}</small></div>
+    <div className="integration-card"><div><h4>Google Calendar + Classroom</h4><p>อ่าน assignment จาก Google Classroom และกิจกรรม Google Calendar ด้วยบัญชี Google แยกจากบัญชีเข้า Amaris การเชื่อมนี้อ่านอย่างเดียวและไม่เปลี่ยน Tasks หรือการส่งงานไป Calendar</p><small>{loadError ? "ตรวจสถานะไม่สำเร็จ" : !status ? "กำลังตรวจการตั้งค่า…" : status.google.connected ? `แหล่งข้อมูล: ${status.google.email || "บัญชี Google ที่เชื่อมต่อ"}${status.google.classroom === false ? " · Classroom ยังไม่ได้รับสิทธิ์" : ""}` : status.google.configured ? "Ready to connect" : "ยังตั้งค่า Google OAuth ไม่ครบ — ต้องตั้งค่าก่อนเชื่อมบัญชี"}</small></div>
       {loadError ? <button className="secondary-button" onClick={() => { setLoadError(""); setAttempt((value) => value + 1); }}>ลองอีกครั้ง</button> : !status ? <button className="primary-button" disabled>กำลังตรวจการตั้งค่า…</button> : !status.google.configured ? <button className="primary-button" aria-expanded={showSetup} aria-controls="google-setup" onClick={() => setShowSetup((value) => !value)}>ตั้งค่า Google Calendar</button> : status.google.connected ? <button className="secondary-button" disabled={pending} onClick={disconnect}>{pending ? "กำลังยกเลิก…" : "ยกเลิกการเชื่อมต่อ"}</button> : <button className="primary-button" disabled={pending} onClick={connect}>{pending ? "กำลังเชื่อมต่อ…" : "เชื่อมบัญชี Google สำหรับข้อมูล"}</button>}
     </div>
     <div className="integration-card"><div><h4>บัญชี</h4><p>บัญชีหลักสำหรับเข้า Amaris และเป็นเจ้าของ Tasks/ข้อมูลเดิม</p><small>{primaryEmail || "ตรวจจากเซสชันที่เข้าสู่ระบบ"}</small></div>{status?.google.connected && <button className="secondary-button" disabled={pending} onClick={connect}>{pending ? "กำลังเปิด Google…" : "เปลี่ยนบัญชีแหล่งข้อมูล"}</button>}</div>

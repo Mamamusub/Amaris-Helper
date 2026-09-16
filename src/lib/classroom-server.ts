@@ -1,4 +1,4 @@
-import { accessToken, IntegrationError, remoteFetch } from "./integration-server";
+import { accessToken, googleClassroomScopes, googleDataScopes, IntegrationError, remoteFetch } from "./integration-server";
 import { dayKey, shiftDay, type CalendarEvent } from "./calendar";
 
 type Course = { id: string; name: string };
@@ -15,6 +15,8 @@ export function assignmentEvent(course: Course, work: Work): CalendarEvent {
 }
 
 export async function classroomAssignments(from: string, to: string) {
+  const scopes = await googleDataScopes();
+  if (!googleClassroomScopes.every(scope => scopes.includes(scope))) throw new IntegrationError("บัญชี Google นี้ไม่มีสิทธิ์อ่านงาน Classroom บัญชีมหาวิทยาลัยอาจบล็อกสิทธิ์นี้ ติดต่อผู้ดูแลระบบหรืออัปเดตสิทธิ์ใน Settings", 403);
   const token = await accessToken();
   let requests = 0;
   async function list<T>(path: string, key: string, params: Record<string, string>): Promise<T[]> {
