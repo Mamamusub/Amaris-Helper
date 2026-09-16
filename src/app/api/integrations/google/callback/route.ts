@@ -21,7 +21,13 @@ export async function GET(request: Request) {
         reason = "token";
         const token = await googleToken({ grant_type: "authorization_code", code: params.get("code")!, redirect_uri: callbackUrl(request) });
         if (!token.refresh_token) { reason = "refresh-token"; throw new Error("Google did not return offline access"); }
-        if (!token.scope || !googleScopes.split(" ").every(scope => token.scope!.split(" ").includes(scope))) { reason = "scopes"; throw new Error("Google returned incomplete scopes"); }
+        const grantedScopes = token.scope?.split(" ").filter(Boolean) ?? [];
+        const missingScopes = googleScopes.split(" ").filter(scope => !grantedScopes.includes(scope));
+        if (missingScopes.length) {
+          reason = "scopes";
+          console.error("Google OAuth returned incomplete scopes", { missingScopes, grantedCount: grantedScopes.length });
+          throw new Error("Google returned incomplete scopes");
+        }
         {
           if (owner) {
             reason = "google-email";
