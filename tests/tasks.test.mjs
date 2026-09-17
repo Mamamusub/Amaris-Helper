@@ -96,6 +96,18 @@ test("Study subject focus opens a linked timer, reuses its task after reload, an
   assert.ok(h.text(h.render()).includes("Could not save tasks"));
 });
 
+test("Study subject color edit propagates to linked tasks", () => {
+  const h = harness();
+  h.storage.set("agent-helper.subjects", JSON.stringify([{ id: "math", name: "Math", context: "Algebra", color: "#abc", nextEvent: "" }]));
+  h.storage.set("agent-helper.tasks", JSON.stringify([{ id: "math-task", title: "Practice", subjectId: "math", color: "#abc", description: "", team: "Study", assignedAgent: "math", status: "Planned", priority: "Medium", deadline: "", createdAt: "old", updatedAt: "old" }]));
+  h.render(); h.click("Study");
+  h.findAll((n) => n.props.className === "subject-card")[0].props.onClick(); h.render();
+  h.click("แก้ไขวิชา"); h.field("สีวิชา", "#123456");
+  h.findAll((n) => n.type === "form").at(-1).props.onSubmit({ preventDefault() {} }); h.render();
+  assert.equal(JSON.parse(h.storage.get("agent-helper.subjects"))[0].color, "#123456");
+  assert.equal(JSON.parse(h.storage.get("agent-helper.tasks"))[0].color, "#123456");
+});
+
 test("Minimized Focus displays its subject and timer and reopens without replacing the session", () => {
   const h = harness();
   h.storage.set("agent-helper.subjects", JSON.stringify([{ id: "math", name: "Math", context: "", color: "#abc", nextEvent: "" }]));
