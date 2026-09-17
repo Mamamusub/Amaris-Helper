@@ -29,6 +29,32 @@ function HistoryRows({ rows }: { rows: HistoryRow[] }) {
   })}{rows.length > limit && <button className="secondary-button focus-load-more" onClick={() => setLimit((value) => value + 20)}>โหลดเพิ่มเติม · เหลือ {rows.length - limit} รอบ</button>}</div>;
 }
 
+const pieFallbackColors = ["#7c9b42", "#d08a42", "#4e8b8b", "#b66578", "#687bb3", "#9b7a42"];
+
+function FocusPieChart({ groups, totalMs }: { groups: { id: string; name: string; color?: string; elapsedMs: number }[]; totalMs: number }) {
+  const [activeId, setActiveId] = useState(groups[0]?.id ?? "");
+  const active = groups.find((group) => group.id === activeId) ?? groups[0];
+  const segments = groups.map((group, index) => {
+    const percent = totalMs ? group.elapsedMs / totalMs * 100 : 0;
+    const start = groups.slice(0, index).reduce((sum, item) => sum + (totalMs ? item.elapsedMs / totalMs * 100 : 0), 0);
+    return { ...group, percent, start, color: group.color && /^#[\da-f]{3,8}$/i.test(group.color) ? group.color : pieFallbackColors[index % pieFallbackColors.length] };
+  });
+  const activePercent = active ? active.elapsedMs / totalMs * 100 : 0;
+  const formatPercent = (value: number) => value.toLocaleString("th-TH", { maximumFractionDigits: 1 });
+  return <section className="focus-pie-section" aria-labelledby="focus-pie-title">
+    <div className="focus-pie-heading"><div><span className="eyebrow">TIME DISTRIBUTION</span><h3 id="focus-pie-title">สัดส่วนเวลาแยกตามวิชา</h3></div><span className="focus-pie-total">รวม {focusDuration(totalMs)}</span></div>
+    <div className="focus-pie-layout">
+      <div className="focus-pie-wrap">
+        <svg className="focus-pie" viewBox="0 0 100 100" role="img" aria-label="กราฟวงกลมสัดส่วนเวลาโฟกัสตามวิชา">
+          {segments.map((segment) => <circle key={segment.id} className="focus-pie-segment" cx="50" cy="50" r="40" pathLength="100" stroke={segment.color} strokeDasharray={`${segment.percent} ${100 - segment.percent}`} strokeDashoffset={-segment.start} aria-label={`${segment.name} ${formatPercent(segment.percent)} เปอร์เซ็นต์ ${focusDuration(segment.elapsedMs)}`} tabIndex={0} onMouseEnter={() => setActiveId(segment.id)} onFocus={() => setActiveId(segment.id)} onMouseLeave={() => setActiveId("")} onBlur={() => setActiveId("")} />)}
+        </svg>
+        <div className="focus-pie-tooltip" role="status"><strong>{active?.name ?? "-"}</strong><span>{active ? `${formatPercent(activePercent)}% · ${focusDuration(active.elapsedMs)}` : "เลื่อนเมาส์ไปที่ส่วนของกราฟ"}</span></div>
+      </div>
+      <div className="focus-pie-legend" aria-label="รายการสัดส่วนเวลาแต่ละวิชา">{segments.map((segment) => <button type="button" className="focus-pie-legend-item" key={segment.id} onMouseEnter={() => setActiveId(segment.id)} onFocus={() => setActiveId(segment.id)} onMouseLeave={() => setActiveId("")} onBlur={() => setActiveId("")}><span className="focus-pie-legend-color" style={{ backgroundColor: segment.color }} aria-hidden="true" /><span className="focus-pie-legend-name">{segment.name}</span><strong>{formatPercent(segment.percent)}%</strong></button>)}</div>
+    </div>
+  </section>;
+}
+
 export default function FocusDashboard({ tasks, subjects, session, loading = false, error = "", retry, chooseTasks }: { tasks: Task[]; subjects: Subject[]; session: FocusSession | null; loading?: boolean; error?: string; retry: () => void; chooseTasks: () => void }) {
   const { focus } = useContext(TaskContext);
   const [today, setToday] = useState(() => dayKey(new Date()));
@@ -60,6 +86,7 @@ export default function FocusDashboard({ tasks, subjects, session, loading = fal
         const color = group.color && /^#[\da-f]{3,8}$/i.test(group.color) ? group.color : "#afbc92";
         return <section className="focus-subject" key={group.id}><h3><button className="focus-subject-toggle" aria-expanded={isOpen} aria-controls={panelId} onClick={() => setExpanded((old) => isOpen ? old.filter((id) => id !== group.id) : [...old, group.id])}><span className="focus-disclosure" aria-hidden="true">{isOpen ? "▾" : "▸"}</span><span className="focus-subject-color" style={{ backgroundColor: color }} aria-hidden="true" /><span className="focus-subject-name">{group.name}<small>{group.rows.length} รอบ · {percent.toLocaleString("th-TH", { maximumFractionDigits: 1 })}% ของเวลารวม · {isOpen ? "ยุบประวัติ" : "ขยายประวัติ"}</small></span><strong>{focusDuration(group.elapsedMs)}</strong></button></h3><div className="focus-share-track" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div><div id={panelId} hidden={!isOpen}>{isOpen && <HistoryRows key={`${range.from}:${range.to}`} rows={group.rows} />}</div></section>;
       })}</section>}
+      {!invalid && summary.count > 0 && <FocusPieChart groups={summary.groups} totalMs={summary.elapsedMs} />}
       {!!undated.length && <section className="focus-undated"><button className="secondary-button" aria-expanded={undatedOpen} aria-controls="focus-undated-history" onClick={() => setUndatedOpen(!undatedOpen)}>{undatedOpen ? "▾" : "▸"} ประวัติที่ไม่มีวันที่เริ่ม · {undated.length} รอบ</button><p className="focus-counting-note">ยังอ่านประวัติได้ แต่ไม่นำมารวมในช่วงวันที่ เพราะไม่มีข้อมูลวันที่เริ่ม</p><div id="focus-undated-history" hidden={!undatedOpen}>{undatedOpen && <HistoryRows rows={undated} />}</div></section>}
     </>}
   </div>;

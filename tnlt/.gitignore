@@ -1,8 +1,0 @@
-node_modules/
-.next/
-.npm-cache/
-.env
-data/
-src/generated/
-*.tsbuildinfo
-test-results/
