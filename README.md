@@ -1,6 +1,6 @@
 # Amaris Helper
 
-Pai's local-first personal AI team for university, internship preparation, personal projects, and daily planning. The workspace keeps state in the browser. Pipeline prepares a prompt to copy into ChatGPT and saves the answer pasted back by the user; the separate agent workspace chat remains a local demo.
+A full-stack productivity workspace for university study, task management, career preparation, and personal projects.
 
 ## What works
 
