@@ -39,7 +39,8 @@ Subject-based workspaces for organizing assignments, exams, and study planning.
 - **AI Agent Workspace** — Specialized assistants for study, career preparation, project planning, development, and other workflows.
 - **Cross-Device Sync** — Sign in with Google and synchronize workspace data across devices using Supabase.
 - **Career & Exam Planning** — Dedicated workspaces for internship preparation, career planning, exams, and checklists.
-- **Personal Management** — Includes finance tracking, investment records, file storage, focus tools, and personal project planning.
+- **Personal Management** — Track finances and investments, manage private files, use focus tools, and organize personal development projects.
+- **Portfolio Tracking** — Connect supported Google Sheets data to view and manage portfolio-related information inside the workspace.
 
 ## Tech Stack
 
@@ -62,6 +63,7 @@ Subject-based workspaces for organizing assignments, exams, and study planning.
 - Google OAuth 2.0
 - Google Calendar API
 - Google Classroom Assignments via Calendar
+- Google Sheets API
 
 **Development & Deployment**
 - Git & GitHub
