@@ -169,61 +169,29 @@ Each agent has a defined role and capability set, allowing requests to be routed
 
 ## Integrations
 
-Open **Calendar** and choose a calendar to see its Google events and local task deadlines in a monthly view. Subscribed calendars such as **Classroom Assignments** are supported; a calendar with that name is selected automatically when available. The connected account appears below the calendar selector. Select a date to see details, choose a due date and an assistant, then click **Assign as task**. The task is saved locally and can be completed in **Tasks**. Each Google event can be assigned once; recurring occurrences are separate events.
+### Google Calendar & Classroom
 
-Use **Everything / Google Calendar / My tasks** to filter the calendar, the arrows to change months, **Today** to return to the current date, and **Refresh** to reload Google changes. The calendar uses **Asia/Bangkok (UTC+7)**. Multi-day all-day events exclude Google's end date; assignment defaults to the last included day. Timed events default to their start date in Bangkok. You can choose another deadline before assigning.
+Amaris Helper connects with Google Calendar to bring university schedules and deadlines into the workspace.
 
-Events load from Google when you open Calendar, change months, or refresh. Assigned tasks are local copies: later edits or deletions in Google do not silently change your task. A task with a different deadline also appears on its assigned date. The existing **+ Google Calendar** button in Tasks can still export a local task as an all-day event; imported tasks are not exported again.
+- View Google Calendar events directly inside the application
+- Access Classroom assignment deadlines through the Classroom Assignments calendar
+- Convert Google events into local tasks
+- Filter between Google Calendar events and personal tasks
+- Export local tasks to Google Calendar
+- Handle calendar data using the Asia/Bangkok timezone
 
-If Google is not connected or cannot load, local deadlines remain visible with a connection/retry prompt. No sample Google events are presented as live data.
+### Google Authentication & Supabase
 
-### Google Login and cross-device sync
+Users can sign in with Google through Supabase Auth to synchronize their workspace across devices.
 
-The implementation and external setup checklist are in [docs/google-login-sync.md](docs/google-login-sync.md).
-The app uses Supabase Google OAuth for identity and server-side `workspace_snapshot` / `workspace_apply`
-RPCs for account data. RLS binds records to the verified `auth.uid()`. Login and Calendar use separate callbacks:
+- Google OAuth authentication
+- PostgreSQL-backed workspace synchronization
+- Row Level Security (RLS) for user data isolation
+- Local mode available without an account
+- Import existing local data when signing in
 
-- Login: `/api/auth/callback`
-- Calendar: `/api/integrations/google/callback`
+Detailed setup instructions are available in [`docs/google-login-sync.md`](docs/google-login-sync.md).
 
-Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `APP_ORIGIN` on the server. Run the workspace migration
-on a development Supabase project before enabling Login. No production deployment or production database
-change is performed by this repository work.
-
-Local mode remains available when Supabase is not configured. On first login, the UI offers an explicit
-local-data import with counts; untouched demo records are excluded and the original local data remains.
-
-### Local setup
-
-Start locally with `npm run dev -- --hostname 127.0.0.1` and open `http://localhost:3000`. For account sync,
-complete the Supabase setup in `docs/google-login-sync.md`; otherwise the app stays in Local mode.
-
-Copy `.env.example` to `.env.local` and fill in the integration values. Leave unused providers blank. Never put credentials in `NEXT_PUBLIC_` variables or browser storage. Restart the dev server after changing environment variables.
-
-### Google Calendar
-
-1. In Google Cloud, create/select a project and enable **Google Calendar API**.
-2. Configure the OAuth consent screen and add your Google account as a test user if the app is in Testing mode.
-3. Create an OAuth client of type **Web application**. Add this exact authorized redirect URI: `http://localhost:3000/api/integrations/google/callback`.
-4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env.local`.
-5. Generate a random encryption secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` and set it as `INTEGRATION_SECRET` (at least 32 characters).
-6. Set `APP_ORIGIN=http://localhost:3000`. If you use a different port, update both this value and the registered Google redirect URI.
-7. Restart the app, open **Settings → Connect Google Calendar**, and grant permission. Open **Calendar**, select a Google event, and assign it as a task.
-
-The app requests `calendar.events.readonly` to read events in calendars you can access, `calendar.calendarlist.readonly` to list those calendars, and `calendar.events.owned` for optional exports to your primary calendar. The refresh token is encrypted in an HttpOnly cookie lasting 30 days; access tokens are requested server-side and never returned to browser JavaScript. Google may expire or revoke authorization earlier, in which case reconnect. Disconnect clears the browser connection and attempts to revoke Google access. Clearing browser cookies or changing the encryption secret also requires reconnecting.
-
-Reference: [Google OAuth web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server) and [Calendar event creation](https://developers.google.com/workspace/calendar/api/v3/reference/events/insert).
-
-### Integration checks
-
-Run `node --test tests/integrations.test.mjs`, `npm run lint`, and `npm run build`. Integration tests mock external requests and do not create real Calendar events. Live verification requires your own OAuth credentials, and Google consent.
-Calendar listing follows the [Google Calendar events.list API](https://developers.google.com/workspace/calendar/api/v3/reference/events/list), including pagination and recurring event expansion.
-
-### Classroom Assignments and other calendars
-
-Connections made before the calendar selector was added need updated consent. Open **Settings → อัปเดตสิทธิ์ Google / เปลี่ยนบัญชี**, choose the Google account that can see your Classroom calendar, and grant access to calendar lists and events. No new client ID or secret is needed. If you maintain the consent screen's Data Access scopes, add `https://www.googleapis.com/auth/calendar.events.readonly` and `https://www.googleapis.com/auth/calendar.calendarlist.readonly` there too.
-
-Return to **Calendar**, select **Classroom Assignments**, and click **Today** to see deadlines for today. The page shows the fetched date range and Google event count. This integration reads events; Google Tasks is a separate service and is not imported here. Local task exports still go to the primary calendar, even when another calendar is selected for viewing.
 ### Pipeline image attachments
 
 Use **Pipeline → + แนบรูป**, or paste an image into the request box with Ctrl+V. Attach up to 3 PNG/JPEG/WebP images (1 MB per file, 2 MB combined), preview/remove them, and send with or without text. Enter sends; Shift+Enter adds a newline. Click an attached thumbnail to view it larger; Escape closes the preview.
