@@ -2,6 +2,12 @@
 
 A full-stack productivity workspace for university study, task management, career preparation, and personal projects.
 
+## Project Status
+
+🟢 **Active Personal Project** — Deployed and actively used as a personal productivity workspace.
+
+The project is continuously improved as new study, productivity, and development workflows are explored.
+
 ## Live Demo
 
 https://amarishelper.vercel.app
