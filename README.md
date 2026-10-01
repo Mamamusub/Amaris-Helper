@@ -116,14 +116,6 @@ Copy `.env.example` to `.env.local` when you want a local configuration file. Do
 
 For the Port page, set `GOOGLE_SHEET_URL` to the Google Sheet URL (or use `GOOGLE_SHEET_ID`) and optionally set `GOOGLE_SHEET_RANGE=PORT!A1:I100`. The Port page then loads that sheet without requiring the URL each time. Reconnect Google after enabling the Sheets API so the read-only Sheets permission is granted.
 
-## Next implementation steps
-
-1. Replace the localStorage adapter with SQLite and a migration layer.
-2. Add server actions/API routes for conversations, tasks, and agent runs.
-3. Add streamed text responses to the individual agent workspace.
-4. Add uploads and structured study records for assignments and exam reviews.
-5. Add authentication and multi-workspace boundaries if the app leaves one device.
-
 ## Assistant names
 
 | Role | Name | Avatar |
