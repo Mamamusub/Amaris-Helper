@@ -2,6 +2,28 @@
 
 A full-stack productivity workspace for university study, task management, career preparation, and personal projects.
 
+## Live Demo
+
+https://amarishelper.vercel.app
+
+## Preview
+
+### Dashboard
+
+![Amaris Helper Dashboard](dashboard.png)
+
+### Calendar
+
+Google Calendar integration for viewing university assignments and managing deadlines.
+
+![Amaris Helper Calendar](calendar.png)
+
+### Study Workspace
+
+Subject-based workspaces for organizing assignments, exams, and study planning.
+
+![Amaris Helper Study Workspace](study.png)
+
 ## What works
 
 - Dashboard with priorities, deadlines, suggested next action, and recent handoffs.
