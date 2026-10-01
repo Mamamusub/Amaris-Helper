@@ -66,21 +66,7 @@ Subject-based workspaces for organizing assignments, exams, and study planning.
 - Node.js Test Runner
 - Integration and task logic tests
 
-## Run it
 
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:3000`.
-
-Useful checks:
-
-```bash
-npm run lint
-npm run build
-```
 
 ## Architecture
 
@@ -119,26 +105,67 @@ The application can operate in local mode using browser storage or in signed-in 
 
 Specialized agents are defined through a central registry containing their roles, capabilities, and routing information. The application uses this registry to route requests to the appropriate workspace while keeping agent configuration separate from the UI.
 
-## Environment
+## Getting Started
 
-Copy `.env.example` to `.env.local` when you want a local configuration file. Do not commit `.env.local` or API keys. To enable real replies in the Pipeline and individual agent workspaces, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL` in `.env.local`, then restart the dev server.
+### 1. Clone the repository
 
-For the Port page, set `GOOGLE_SHEET_URL` to the Google Sheet URL (or use `GOOGLE_SHEET_ID`) and optionally set `GOOGLE_SHEET_RANGE=PORT!A1:I100`. The Port page then loads that sheet without requiring the URL each time. Reconnect Google after enabling the Sheets API so the read-only Sheets permission is granted.
+```bash
+git clone https://github.com/Mamamusub/Amaris-Helper.git
+cd Amaris-Helper
+```
 
-## Assistant names
+### 2. Install dependencies
 
-| Role | Name | Avatar |
-| --- | --- | --- |
-| Secretary | Panda | 🐼 |
-| Researcher | Owl | 🦉 |
-| Reviewer | Eagle | 🦅 |
-| Career Coach | Dog | 🐶 |
-| CV Reviewer | Cat | 🐱 |
-| Project Idea Agent | Fox | 🦊 |
-| Product Planner | Bee | 🐝 |
-| Web Developer | Beaver | 🦫 |
-| UI/UX Agent | Butterfly | 🦋 |
-| Code Reviewer | Octopus | 🐙 |
+```bash
+npm install
+```
+
+### 3. Configure environment variables
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+Fill in the required environment variables for the integrations you want to use. Keep API keys and secrets in `.env.local` and never commit them to the repository.
+
+### 4. Start the development server
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000` in your browser.
+
+### 5. Verify the project
+
+```bash
+npm run lint
+npm run build
+node --test tests/*.test.mjs
+```
+
+The application can run in local mode without Supabase. Google Login, cross-device synchronization, Calendar integration, and other external services require their respective environment variables and configuration.
+
+## AI Agent Team
+
+Amaris Helper includes specialized agents designed for different student and development workflows.
+
+| Agent | Role |
+| --- | --- |
+| 🐼 Panda | Secretary & task coordination |
+| 🦉 Owl | Research assistance |
+| 🦅 Eagle | Content and work review |
+| 🐶 Dog | Career coaching |
+| 🐱 Cat | CV and resume review |
+| 🦊 Fox | Project idea generation |
+| 🐝 Bee | Product planning |
+| 🦫 Beaver | Web development |
+| 🦋 Butterfly | UI/UX design |
+| 🐙 Octopus | Code review |
+
+Each agent has a defined role and capability set, allowing requests to be routed to the appropriate workspace.
 
 ## Integrations
 
