@@ -24,18 +24,47 @@ Subject-based workspaces for organizing assignments, exams, and study planning.
 
 ![Amaris Helper Study Workspace](study.png)
 
-## What works
+## Key Features
 
-- Dashboard with priorities, deadlines, suggested next action, and recent handoffs.
-- Team Grid with the initial Panda, Shared, Career, and Development agents.
-- Agent registry in `src/lib/agents.ts`, including capability and routing metadata.
-- Agent workspace chat, task creation, and routing to the right specialist. Real agent replies use the server-side OpenAI provider when configured.
-- Pipeline trace with useful execution summaries, never hidden chain-of-thought.
-- Tasks view with Today, Upcoming, All Tasks, priorities, deadlines, and completion.
-- Study dashboard with configurable subjects and subject-specific workspaces.
-- Career and Development team views.
-- Browser persistence through localStorage for Local mode, with optional Supabase Auth/Postgres account sync.
-- Manual ChatGPT prompt preparation, image downloads, and saved pasted answers. The former API provider is inactive.
+- **Smart Dashboard** — Displays priorities, upcoming deadlines, exams, and suggested next actions in one place.
+- **Task Management** — Organize tasks by deadline and priority, track completion, and focus on selected tasks.
+- **Google Calendar Integration** — View Google Calendar and Classroom assignment deadlines and convert events into manageable tasks.
+- **Study Workspace** — Organize subjects, assignments, exams, and study activities in dedicated subject workspaces.
+- **AI Agent Workspace** — Specialized assistants for study, career preparation, project planning, development, and other workflows.
+- **Cross-Device Sync** — Sign in with Google and synchronize workspace data across devices using Supabase.
+- **Career & Exam Planning** — Dedicated workspaces for internship preparation, career planning, exams, and checklists.
+- **Personal Management** — Includes finance tracking, investment records, file storage, focus tools, and personal project planning.
+
+## Tech Stack
+
+**Frontend**
+- Next.js
+- React
+- TypeScript
+
+**Backend**
+- Next.js API Routes
+- Node.js
+
+**Database & Authentication**
+- PostgreSQL
+- Supabase
+- Supabase Auth
+- Row Level Security (RLS)
+
+**Integrations**
+- Google OAuth 2.0
+- Google Calendar API
+- Google Classroom Assignments via Calendar
+
+**Development & Deployment**
+- Git & GitHub
+- ESLint
+- Vercel
+
+**Testing**
+- Node.js Test Runner
+- Integration and task logic tests
 
 ## Run it
 
