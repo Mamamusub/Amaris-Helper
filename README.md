@@ -219,4 +219,16 @@ Amaris Helper supports both local-first usage and account-based synchronization.
 - Row Level Security (RLS) isolates data between users
 - Existing local workspace data can be imported into a signed-in account
 
+## Future Improvements
+
+- Expand Google Workspace integrations for academic workflows
+- Improve mobile responsiveness and accessibility
+- Add richer analytics for study progress and productivity
+- Expand file and resource management across workspaces
+- Improve AI agent routing and workflow automation
+- Add more automated testing for critical user flows
+
+
+
+
 Synchronized workspace data includes tasks, study information, career planning, exams and checklists, finance records, projects, preferences, focus sessions, and private workspace files.
