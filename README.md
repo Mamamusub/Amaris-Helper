@@ -84,31 +84,40 @@ npm run build
 
 ## Architecture
 
+Amaris Helper uses a full-stack Next.js architecture with server-side integrations and optional cloud synchronization through Supabase.
+
 ```text
-src/
-  app/                  Next.js route and global styles
-  components/
-    app-shell.tsx       Main application UI and interaction orchestration
-  lib/
-    agents.ts           Central registry and routing rules
-    types.ts            Agent, task, subject, chat, and run contracts
-    storage.ts          Demo records and localStorage adapter
-    ai-provider.ts      Provider interface and Demo provider
+User
+  │
+  ▼
+Next.js / React / TypeScript
+  │
+  ├── Dashboard, Tasks, Study, Career, Exam
+  │
+  ├── AI Agent Workspaces
+  │
+  └── Calendar & Personal Management
+  │
+  ▼
+Next.js Server / API Routes
+  │
+  ├── Google OAuth
+  ├── Google Calendar API
+  └── Server-side integrations
+  │
+  ▼
+Supabase
+  ├── PostgreSQL
+  ├── Authentication
+  ├── Row Level Security
+  └── Cross-device workspace sync
 ```
 
-The current UI is intentionally one route with view state. This keeps the MVP easy to understand while preserving clear boundaries for a later route split and server-backed repository.
+The application can operate in local mode using browser storage or in signed-in mode with Supabase-backed synchronization. Sensitive credentials and external API access are handled server-side rather than exposed to the browser.
 
-### How agents work
+### AI Agent System
 
-Agents are data in the registry, not definitions scattered across components. Add an entry to `agents` with an id, team, role, description, capabilities, and status. Team Grid and workspaces will pick it up automatically. Add a routing rule in `chooseRoute` only when Panda should recognize a new request category.
-
-### How routing works
-
-The Live Pipeline sends a command to the selected Team Grid agent through `/api/pipeline/run`. The server reads the API key from `AI_PROVIDER=openai` and `OPENAI_API_KEY` in `.env.local`; the key is never sent from the browser. Older saved runs may still contain the manual copy/paste prompt format. Individual agent workspaces use the same server-side provider through `/api/agent/chat`.
-
-### Add a subject
-
-Use Study > Add subject. The subject is persisted locally and opens as its own subject agent workspace. A future SQLite repository can store notes, assignments, exam dates, resources, and conversation history against the same subject id.
+Specialized agents are defined through a central registry containing their roles, capabilities, and routing information. The application uses this registry to route requests to the appropriate workspace while keeping agent configuration separate from the UI.
 
 ## Environment
 
