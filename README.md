@@ -198,15 +198,15 @@ Users can sign in with Google through Supabase Auth to synchronize their workspa
 
 Detailed setup instructions are available in [`docs/google-login-sync.md`](docs/google-login-sync.md).
 
-## AI Pipeline
+## AI-Assisted Workflow
 
-The Pipeline provides a structured workflow for working with specialized AI agents while keeping the user in control of the interaction.
+Amaris Helper includes a manual AI-assisted workflow that organizes requests through specialized agent roles without requiring a built-in external AI API.
 
-- Route requests to specialized agents based on the task
-- Prepare structured prompts for use with ChatGPT
-- Attach PNG, JPEG, and WebP images to requests
-- Keep previous pipeline runs and responses for later reference
-- Support manual ChatGPT workflows without requiring an external AI API
+- Route requests based on specialized agent roles
+- Generate structured prompts for use with ChatGPT
+- Attach PNG, JPEG, and WebP images as supporting context
+- Store previous workflow runs and responses for later reference
+- Keep AI interaction user-controlled through a manual copy-and-paste workflow
 
 ## Data & Synchronization
 
