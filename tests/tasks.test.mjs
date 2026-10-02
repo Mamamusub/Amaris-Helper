@@ -337,16 +337,52 @@ test("Focus navigation defaults to week, expands multiple subjects, paginates an
 });
 
 test("Career forms persist, open read-first, link resumes and create only one task", () => {
- const h=harness(); h.render(); h.click("Career"); h.click("Applications"); h.click("+ Add application");
+ const h=harness(); h.render(); h.click("Career"); h.click("Applications"); h.click("+ Add internship");
+ const open = () => {h.findAll(n=>n.props["aria-label"] === "Open Internship test / Backend intern")[0].props.onClick();h.render();};
  h.field("Company","Internship test"); h.field("Position","Backend intern"); h.field("Next action","Prepare application"); h.field("Resume version","resume-0");
  const submit = () => {h.findAll(n=>n.type === "form")[0].props.onSubmit({preventDefault(){}});h.render();};
- submit(); h.click("Internship test"); assert.equal(h.findAll(n=>n.type === "form").length,0);
+ submit(); open(); assert.equal(h.findAll(n=>n.type === "form").length,0);
  h.click("Edit application"); h.field("Application link","javascript:alert(1)"); submit(); assert.equal(h.findAll(n=>n.type === "form").length,1);
- h.field("Application link","https://example.com/jobs"); submit(); h.click("Internship test");
+ h.field("Application link","https://example.com/jobs"); submit(); open();
  h.click("Create practice / next action Task"); h.click("Create practice / next action Task");
  const stored = JSON.parse(h.storage.get("agent-helper.tasks")); assert.equal(stored.filter(t=>t.title === "Prepare application").length,1);
- h.refresh(); h.click("Career"); h.click("Applications"); h.click("Internship test"); h.click("Edit application");
+ h.refresh(); h.click("Career"); h.click("Applications"); open(); h.click("Edit application");
  assert.equal(h.findAll(n=>n.type === "select" && n.props.value === "resume-0", h.findAll(n=>n.type === "form")[0]).length,1);
+ h.click("Cancel"); open(); h.click("Delete application"); h.click("Delete");
+ assert.equal(JSON.parse(h.storage.get("amaris.career.applications")).some(app=>app.company === "Internship test"), false);
+ assert.equal(JSON.parse(h.storage.get("agent-helper.tasks")).filter(t=>t.title === "Prepare application").length, 1);
+});
+
+test("Internship tracker filters, sorts, groups periods and edits shared application records in all views", () => {
+ const h = harness();
+ const base = {company:"Same company",status:"Interested",deadline:"2026-10-07",link:"",notes:"Existing notes",location:"Bangkok",resumeId:"resume-0",nextAction:"Prepare resume"};
+ h.storage.set("amaris.career.applications", JSON.stringify([
+   {...base,id:"backend",position:"Backend intern",field:"Software",workType:"Remote",duration:"3 months",internshipPeriod:"Apr–Jun 2027",periodMatch:"Match",interestLevel:"High",applicationOpen:"Open",nextActionDate:"2026-10-05"},
+   {...base,id:"security",position:"Security intern",field:"Security",location:"Chiang Mai",internshipPeriod:"November 2026",status:"Online Test",periodMatch:"Partial match",interestLevel:"Medium",deadline:"2026-10-04",nextActionDate:"2026-10-08"},
+ ]));
+ h.render(); h.click("Career"); h.click("Applications");
+ const cards = () => h.findAll(n => n.type === "button" && n.props["aria-label"]?.startsWith("Open Same company /"));
+ assert.equal(cards().length, 2); assert.equal(cards()[0].props["aria-label"], "Open Same company / Security intern");
+ h.field("Sort", "next"); assert.equal(cards()[0].props["aria-label"], "Open Same company / Backend intern");
+ for (const [label,value] of [["Field","Software"],["Location","Bangkok"],["Status","Interested"],["Internship period","Apr–Jun 2027"],["Period match","Match"],["Interest level","High"]]) {
+   h.field(label, value); assert.equal(cards().length, 1); assert.equal(cards()[0].props["aria-label"], "Open Same company / Backend intern"); h.click("Clear filters");
+ }
+ h.field("Field", "Software"); h.field("Location", "Chiang Mai"); assert.equal(cards().length, 0); assert.ok(h.text(h.render()).includes("No internships match")); h.click("Clear filters");
+ h.field("Group by internship period", true); assert.ok(h.findAll(n=>n.type === "h4" && h.text(n) === "November 2026").length);
+ h.click("Table"); assert.equal(h.findAll(n=>n.type === "table").length, 2);
+ h.click("Kanban"); assert.equal(h.findAll(n=>n.props["aria-label"] === "Online Test applications").length, 2);
+ const select = h.findAll(n=>n.type === "select" && n.props["aria-label"] === "Same company / Backend intern status")[0];
+ select.props.onChange({target:{value:"Interview"}}); h.render();
+ assert.equal(JSON.parse(h.storage.get("amaris.career.applications"))[0].status, "Interview");
+ cards().find(n=>n.props["aria-label"] === "Open Same company / Backend intern").props.onClick(); h.render();
+ assert.equal(h.findAll(n=>n.props.role === "dialog").length, 1); assert.equal(h.findAll(n=>n.type === "form").length, 0);
+ h.click("Edit application"); h.field("Contact", "recruiter@example.com"); h.field("Interest level", "Low");
+ h.findAll(n=>n.type === "form")[0].props.onSubmit({preventDefault(){}}); h.render();
+ h.refresh(); h.click("Career"); h.click("Applications");
+ const saved = JSON.parse(h.storage.get("amaris.career.applications"));
+ assert.equal(saved.length, 2); assert.equal(saved[0].contact, "recruiter@example.com"); assert.equal(saved[0].interestLevel, "Low"); assert.equal(saved[0].notes, "Existing notes"); assert.equal(saved[0].resumeId, "resume-0");
+ h.failWrites(); h.findAll(n=>n.type === "select" && n.props["aria-label"] === "Same company / Backend intern status")[0].props.onChange({target:{value:"Offer"}}); h.render();
+ assert.equal(JSON.parse(h.storage.get("amaris.career.applications"))[0].status, "Interview"); assert.ok(h.findAll(n=>n.props.role === "alert").length);
 });
 
 test("Career project, resume, skill and interview detail edits survive reload", () => {

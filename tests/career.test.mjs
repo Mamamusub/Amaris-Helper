@@ -86,3 +86,46 @@ test("application references survive resume deletion; dates and duplicate task k
 });
 
 test("linked task IDs fit cloud storage for long Unicode practice notes", () => { assert.ok(mod.exports.careerTaskId("skills", "skill-1", "\u0e01".repeat(2000)).length < 200); });
+
+test("internship migration is read-only and idempotent, preserving legacy details and arrangement", () => {
+ const storage = memory();
+ const legacy = [{...careerDefaults().applications[0], arrangement:"Hybrid", internshipPeriod:"November 2026", resumeId:"resume-0", nextAction:"Prepare resume", nextActionDate:"2026-10-10"}];
+ const raw = JSON.stringify(legacy); storage.setItem(careerKey("legacy", "applications"), raw);
+ const data = readCareer(storage, "legacy"); const app = data.applications[0];
+ for (const key of ["field", "duration", "periodMatch", "applicationOpen", "contact", "interestLevel"]) assert.equal(app[key], "");
+ assert.equal(app.workType, "Hybrid"); assert.equal(app.arrangement, "Hybrid");
+ assert.equal(app.internshipPeriod, "November 2026"); assert.equal(app.resumeId, "resume-0");
+ assert.equal(storage.getItem(careerKey("legacy", "applications")), raw);
+ assert.equal(JSON.stringify(mod.exports.migrateSection("applications", data.applications)), JSON.stringify(data.applications));
+ assert.equal(mod.exports.careerTaskId("applications", app.id, app.nextAction), mod.exports.careerTaskId("applications", legacy[0].id, legacy[0].nextAction));
+});
+
+test("multiple internship positions and Online Test round trip without crossing account scopes", () => {
+ const storage = memory(); const data = readCareer(storage, "one");
+ const first = {...data.applications[0], id:"backend", company:"Same company", position:"Backend", status:"Online Test", field:"Software", workType:"Remote", duration:"3 months", internshipPeriod:"Apr–Jun 2027", periodMatch:"Match", applicationOpen:"Open", contact:"jobs@example.com", interestLevel:"High"};
+ const second = {...first, id:"security", position:"Security", field:"Cybersecurity", workType:"On-site", interestLevel:"Medium"};
+ writeCareer(storage, "one", "applications", [first, second], data.applications);
+ const reloaded = readCareer(storage, "one");
+ assert.equal(JSON.stringify(reloaded.applications), JSON.stringify([first, second]));
+ assert.equal(careerReadiness(reloaded).applications, 2);
+ assert.equal(readCareer(storage, "two").applications.length, 3);
+ for (const change of [{interestLevel:2}, {periodMatch:"invalid"}, {applicationOpen:true}, {workType:"invalid"}, {status:"invalid"}]) {
+   assert.throws(() => writeCareer(storage, "one", "applications", [{...first, ...change}, second], reloaded.applications));
+   assert.equal(JSON.stringify(readCareer(storage, "one").applications), JSON.stringify(reloaded.applications));
+ }
+});
+
+test("internship summary and urgency share career calendar-day boundaries", () => {
+ const {applicationSummary, applicationUrgency, careerDays} = mod.exports;
+ const base = careerDefaults().applications[0];
+ const apps = ["Interested", "Preparing", "Applied", "Online Test", "Interview", "Offer", "Rejected"].map((status,i) => ({...base,id:String(i),status}));
+ apps.push({...base,id:"open",status:"Interested",applicationOpen:"Open"});
+ assert.equal(JSON.stringify(applicationSummary(apps).map(item => item.count)), JSON.stringify([2,2,1,1,1,1]));
+ const now = new Date("2026-10-02T23:59:00");
+ assert.equal(applicationUrgency("Deadline","2026-10-07",now), "Deadline in 5 days");
+ assert.equal(applicationUrgency("Interview","2026-10-03T09:00",now), "Interview tomorrow");
+ assert.equal(applicationUrgency("Follow-up","2026-10-02",now), "Follow-up today");
+ assert.equal(applicationUrgency("Deadline","2026-10-01",now), "Deadline overdue by 1 day");
+ assert.equal(careerDays("2027-01-01",new Date("2026-12-31T12:00")), 1);
+ assert.equal(applicationUrgency("Deadline","invalid",now), "");
+});

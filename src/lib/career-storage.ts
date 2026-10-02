@@ -1,10 +1,14 @@
-export const applicationStatuses = ["Interested", "Preparing", "Applied", "Interview", "Offer", "Rejected"] as const;
+export const applicationStatuses = ["Interested", "Preparing", "Applied", "Online Test", "Interview", "Offer", "Rejected"] as const;
+export const workTypes = ["", "On-site", "Hybrid", "Remote"] as const;
+export const periodMatches = ["", "Match", "Partial match", "No match", "Unknown"] as const;
+export const applicationOpenStates = ["", "Open", "Not yet open", "Closed", "Unknown"] as const;
+export const interestLevels = ["", "High", "Medium", "Low"] as const;
 export const skillLevels = ["Not started", "Learning", "Comfortable"] as const;
 export const skillGroups = ["Programming", "Tools", "Backend", "CS Fundamentals", "Cybersecurity"] as const;
 export const projectChecks = ["GitHub", "README", "Demo", "Screenshot", "Resume bullet"];
 export const resumeChecks = ["Education", "Skills", "Projects", "Experience", "Contact", "Links", "Spelling", "PDF ready"];
 export type Check = boolean | "na";
-export type Application = { appliedDate?: string; interviewDate?: string; followUpDate?: string; nextAction?: string; nextActionDate?: string; resumeId?: string; internshipPeriod?: string; arrangement?: string; requirements?: string; id: string; company: string; position: string; status: typeof applicationStatuses[number]; deadline: string; link: string; notes: string; location: string; sample?: boolean };
+export type Application = { field?: string; workType?: string; duration?: string; periodMatch?: string; applicationOpen?: string; contact?: string; interestLevel?: string; appliedDate?: string; interviewDate?: string; followUpDate?: string; nextAction?: string; nextActionDate?: string; resumeId?: string; internshipPeriod?: string; arrangement?: string; requirements?: string; id: string; company: string; position: string; status: typeof applicationStatuses[number]; deadline: string; link: string; notes: string; location: string; sample?: boolean };
 export type Project = { description?: string; role?: string; techStack?: string; readmeUrl?: string; demoUrl?: string; screenshotUrl?: string; resumeBullet?: string; outcome?: string; id: string; name: string; link: string; checks: Check[]; sample?: boolean };
 export type Skill = { criteria?: string; evidence?: string; nextPractice?: string; id: string; name: string; group: string; level: typeof skillLevels[number] };
 export type Resume = { language?: string; targetRole?: string; documentUpdatedAt?: string; id: string; name: string; status: "Draft" | "In review" | "Ready"; link: string; checks: Check[]; updatedAt: string };
@@ -30,7 +34,7 @@ function valid(section: CareerSection, value: unknown) {
   if (new Set(value.map((item) => item.id)).size !== value.length) return false;
   return value.every((item) => {
     if (!extraFields[section].every(key => item[key] === undefined || typeof item[key] === "string")) return false;
-    if (section === "applications") return strings(item, ["company", "position", "deadline", "link", "notes", "location"]) && applicationStatuses.includes(item.status);
+    if (section === "applications") return strings(item, ["company", "position", "deadline", "link", "notes", "location"]) && applicationStatuses.includes(item.status) && [["workType", workTypes], ["periodMatch", periodMatches], ["applicationOpen", applicationOpenStates], ["interestLevel", interestLevels]].every(([key, options]) => item[key as string] === undefined || (options as readonly string[]).includes(item[key as string]));
     if (section === "projects") return strings(item, ["name", "link"]) && checks(item.checks);
     if (section === "resume") return strings(item, ["name", "link", "updatedAt"]) && ["Draft", "In review", "Ready"].includes(item.status) && checks(item.checks);
     if (section === "skills") return strings(item, ["name", "group"]) && skillLevels.includes(item.level);
@@ -57,13 +61,13 @@ export function writeCareer<K extends CareerSection>(storage: Pick<Storage, "get
 }
 
 export const extraFields: Record<CareerSection, string[]> = {
- goal: [], applications: ["appliedDate", "interviewDate", "followUpDate", "nextAction", "nextActionDate", "resumeId", "internshipPeriod", "arrangement", "requirements"],
+ goal: [], applications: ["appliedDate", "interviewDate", "followUpDate", "nextAction", "nextActionDate", "resumeId", "internshipPeriod", "arrangement", "requirements", "field", "workType", "duration", "periodMatch", "applicationOpen", "contact", "interestLevel"],
  projects: ["description", "role", "techStack", "readmeUrl", "demoUrl", "screenshotUrl", "resumeBullet", "outcome"],
  resume: ["language", "targetRole", "documentUpdatedAt"], skills: ["criteria", "evidence", "nextPractice"], interview: ["notes", "practicedAt", "blockers", "situation", "task", "action", "result"]
 };
 export function migrateSection(section: CareerSection, value: unknown): unknown {
  if (section === "goal") return value;
- return (value as Record<string, unknown>[]).map(item => ({ ...Object.fromEntries(extraFields[section].map(key => [key, ""])), ...item, ...(section === "resume" ? { checks: [...item.checks as Check[], ...Array(Math.max(0, 8 - (item.checks as Check[]).length)).fill(false)] } : {}) }));
+ return (value as Record<string, unknown>[]).map(item => ({ ...Object.fromEntries(extraFields[section].map(key => [key, ""])), ...item, ...(section === "applications" ? { workType: item.workType ?? (workTypes.includes(item.arrangement as typeof workTypes[number]) ? item.arrangement : "") ?? "" } : {}), ...(section === "resume" ? { checks: [...item.checks as Check[], ...Array(Math.max(0, 8 - (item.checks as Check[]).length)).fill(false)] } : {}) }));
 }
 export const counted = (values: Check[]) => values.filter(value => value !== "na");
 export const completion = (values: Check[]) => counted(values).length ? Math.round(counted(values).filter(value => value === true).length / counted(values).length * 100) : 0;
@@ -73,7 +77,7 @@ export function careerReadiness(data: CareerData) {
  const projects = data.projects.filter(item => (data.goal.projectIds ?? data.projects.map(p => p.id)).includes(item.id));
  const selectedSkills = data.skills.filter(item => (data.goal.skillIds ?? data.skills.map(s => s.id)).includes(item.id));
  const resume = completion(resumes.flatMap(item => item.checks)), portfolio = completion(projects.flatMap(item => item.checks)), skills = completion(selectedSkills.map(item => item.level === "Comfortable"));
- const applications = data.applications.filter(item => ["Applied", "Interview", "Offer", "Rejected"].includes(item.status)).length;
+ const applications = data.applications.filter(item => ["Applied", "Online Test", "Interview", "Offer", "Rejected"].includes(item.status)).length;
  return { resume, portfolio, skills, applications, total: Math.round((resume + portfolio + skills) / 3), resumeCount: counted(resumes.flatMap(item => item.checks)).length, projectCount: counted(projects.flatMap(item => item.checks)).length, skillCount: selectedSkills.length, readyProjects: projects.filter(item => projectStatus(item) === "Ready").length, coveredSkills: selectedSkills.filter(item => item.level === "Comfortable").length };
 }
 export function applicationDates(app: Application) {
@@ -82,8 +86,22 @@ export function applicationDates(app: Application) {
 export function careerDate(value: string, now = new Date()) {
  if (!value || !Number.isFinite(Date.parse(value))) return "No date";
  const date = new Date(value.length === 10 ? value + "T00:00:00" : value);
- const days = Math.round((Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()) - Date.UTC(now.getFullYear(),now.getMonth(),now.getDate())) / 86400000);
+ const days = careerDays(value, now)!;
  return date.toLocaleDateString("th-TH") + (value.includes("T") ? " " + date.toLocaleTimeString("th-TH", {hour:"2-digit",minute:"2-digit"}) : "") + " · " + (days < 0 ? "เลยกำหนด " + -days + " วัน" : days === 0 ? "วันนี้" : "อีก " + days + " วัน");
+}
+// Shared local calendar-day calculation, including daylight saving boundaries.
+export function careerDays(value: string, now = new Date()): number | null {
+ if (!value || !Number.isFinite(Date.parse(value))) return null;
+ const date = new Date(value.length === 10 ? value + "T00:00:00" : value);
+ return Math.round((Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+}
+export function applicationUrgency(label: string, value: string, now = new Date()) {
+ const days = careerDays(value, now);
+ if (days === null) return "";
+ return days < 0 ? `${label} overdue by ${-days} ${days === -1 ? "day" : "days"}` : days === 0 ? `${label} today` : days === 1 ? `${label} tomorrow` : `${label} in ${days} days`;
+}
+export function applicationSummary(apps: Application[]) {
+ return ["Interested", "Open/Preparing", "Applied", "Online Test", "Interview", "Offer"].map(label => ({ label, count: apps.filter(app => label === "Open/Preparing" ? app.status === "Preparing" || (app.status === "Interested" && app.applicationOpen === "Open") : app.status === label).length }));
 }
 export const careerTaskId = (section: string, id: string, title: string) => {
  // Keep IDs within the existing workspace's 200-character limit, even for Thai notes.
