@@ -49,6 +49,7 @@
 .cardDates { display:grid; gap:8px; }.dateLabel,.overdue { display:flex; flex-direction:column; gap:3px; font-size:12px; }
 .dateLabel small,.overdue small { font-size:10px; color:#68725e; }.overdue { color:#9b5138; }
 .internshipCard>select { margin:0 18px 18px; width:calc(100% - 36px); }
+.internshipActions { font-size:12px; }.internshipCard>.internshipActions { margin:0 18px 14px; }.page .internshipActions summary { padding:4px 0; }.internshipActions button { color:#865237; }
 .kanban { display:grid; grid-template-columns:repeat(7,minmax(260px,1fr)); gap:14px; overflow-x:auto; padding-bottom:14px; align-items:start; }
 .kanbanColumn { padding:12px; background:#f1f3e8; border:1px solid #e0e5d6; border-radius:14px; display:grid; gap:12px; min-width:0; }
 .kanbanColumn>h4 { margin:0; font-size:14px; }.periodGroup { margin-top:24px; }.periodGroup>h4 { font-size:16px; }

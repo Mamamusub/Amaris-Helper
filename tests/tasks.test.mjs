@@ -348,7 +348,7 @@ test("Career forms persist, open read-first, link resumes and create only one ta
  const stored = JSON.parse(h.storage.get("agent-helper.tasks")); assert.equal(stored.filter(t=>t.title === "Prepare application").length,1);
  h.refresh(); h.click("Career"); h.click("Applications"); open(); h.click("Edit application");
  assert.equal(h.findAll(n=>n.type === "select" && n.props.value === "resume-0", h.findAll(n=>n.type === "form")[0]).length,1);
- h.click("Cancel"); open(); h.click("Delete application"); h.click("Delete");
+ h.click("Cancel"); open(); h.click("Delete application"); h.click("Delete", h.findAll(n=>n.props.role === "dialog")[0]);
  assert.equal(JSON.parse(h.storage.get("amaris.career.applications")).some(app=>app.company === "Internship test"), false);
  assert.equal(JSON.parse(h.storage.get("agent-helper.tasks")).filter(t=>t.title === "Prepare application").length, 1);
 });
@@ -383,6 +383,64 @@ test("Internship tracker filters, sorts, groups periods and edits shared applica
  assert.equal(saved.length, 2); assert.equal(saved[0].contact, "recruiter@example.com"); assert.equal(saved[0].interestLevel, "Low"); assert.equal(saved[0].notes, "Existing notes"); assert.equal(saved[0].resumeId, "resume-0");
  h.failWrites(); h.findAll(n=>n.type === "select" && n.props["aria-label"] === "Same company / Backend intern status")[0].props.onChange({target:{value:"Offer"}}); h.render();
  assert.equal(JSON.parse(h.storage.get("amaris.career.applications"))[0].status, "Interview"); assert.ok(h.findAll(n=>n.props.role === "alert").length);
+});
+
+test("Career hides the task deletion toast while keeping task deletion and Undo in other modules", () => {
+ const h = harness();
+ const task = {id:"career-task",title:"Prepare internship",description:"",team:"Career",assignedAgent:"secretary",status:"Planned",priority:"Medium",deadline:"",createdAt:"old",updatedAt:"old"};
+ h.storage.set("agent-helper.tasks", JSON.stringify([task]));
+ h.render(); h.click("Career"); h.click("Delete");
+ assert.ok(JSON.parse(h.storage.get("agent-helper.tasks"))[0].deletedAt);
+ const toast = () => h.findAll(n=>n.props.className === "notice" && n.props.role === "status" && h.text(n).includes("Task deleted"));
+ assert.equal(toast().length, 0); h.click("Applications"); assert.equal(toast().length, 0);
+ h.click("Today"); assert.equal(toast().length, 1); h.click("Undo");
+ assert.equal(JSON.parse(h.storage.get("agent-helper.tasks"))[0].deletedAt, undefined);
+});
+
+for (const view of ["Cards", "Table", "Kanban", "Drawer", "Editing drawer"]) {
+ test(`Internship deletion from ${view} confirms, updates every view and summary, and preserves other data`, () => {
+  const h = harness();
+  const base = {company:"Example Company",position:"Backend intern",status:"Interested",deadline:"",link:"",notes:"Keep details",location:"Bangkok"};
+  h.storage.set("amaris.career.applications",JSON.stringify([{...base,id:"delete-me"},{...base,id:"keep-me",position:"Security intern",status:"Applied"}]));
+  const other = {goal:{title:"Saved goal",roles:"Backend"},resume:[],projects:[],skills:[],interview:[]};
+  for (const [section,value] of Object.entries(other)) h.storage.set(`amaris.career.${section}`,JSON.stringify(value));
+  h.storage.set("agent-helper.tasks", "[]");
+  const read = () => JSON.parse(h.storage.get("amaris.career.applications"));
+  const dialog = () => h.findAll(n=>n.props.role === "dialog")[0];
+  h.render(); h.click("Career"); h.click("Applications");
+  const request = () => {
+   if (view.includes("drawer") || view === "Drawer") {
+    h.findAll(n=>n.props["aria-label"] === "Open Example Company / Backend intern")[0].props.onClick(); h.render();
+    if (view === "Editing drawer") h.click("Edit application");
+    h.click("Delete application");
+   } else {
+    h.click(view);
+    h.findAll(n=>n.type === "button" && n.props["aria-label"] === "Delete Example Company / Backend intern")[0].props.onClick(); h.render();
+   }
+  };
+  const interestedCount = () => {
+   const summary = h.findAll(n=>n.props["aria-label"] === "Internship summary")[0];
+   return h.findAll(n=>n.type === "div" && h.findAll(s=>s.type === "span" && h.text(s) === "Interested",n).length && h.findAll(s=>s.type === "strong",n).length === 1, summary).map(n=>h.text(h.findAll(s=>s.type === "strong",n)[0]))[0];
+  };
+  assert.equal(interestedCount(), 1); request(); assert.equal(read().length, 2); assert.ok(h.text(dialog()).includes("cannot be undone"));
+  h.click("Cancel",dialog()); assert.equal(read().length, 2); request(); h.click("Delete",dialog());
+  assert.equal(dialog(), undefined); assert.equal(read().length, 1); assert.equal(read()[0].id,"keep-me"); assert.equal(interestedCount(), 0);
+  for (const item of ["Cards","Table","Kanban"]) {h.click(item);assert.equal(h.findAll(n=>n.props["aria-label"] === "Delete Example Company / Backend intern").length,0);}
+  for (const [section,value] of Object.entries(other)) assert.equal(h.storage.get(`amaris.career.${section}`),JSON.stringify(value));
+  assert.equal(h.storage.get("agent-helper.tasks"),"[]");
+  h.refresh(); h.click("Career"); h.click("Applications"); assert.equal(read().length,1); assert.equal(interestedCount(),0);
+ });
+}
+
+test("Internship failed deletion keeps the record, counts and confirmation available", () => {
+ const h = harness(); h.render(); h.click("Career"); h.click("Applications");
+ const label = "Delete Example Company / Software Engineer Intern";
+ h.findAll(n=>n.props["aria-label"] === label)[0].props.onClick(); h.render();
+ h.failWrites(); h.click("Delete", h.findAll(n=>n.props.role === "dialog")[0]);
+ assert.equal(h.findAll(n=>n.props.role === "dialog").length,1);
+ assert.ok(h.findAll(n=>n.props.role === "alert").length);
+ assert.equal(h.findAll(n=>n.props["aria-label"] === label).length,1);
+ assert.equal(h.storage.get("amaris.career.applications"),undefined);
 });
 
 test("Career project, resume, skill and interview detail edits survive reload", () => {

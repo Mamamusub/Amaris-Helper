@@ -11,10 +11,11 @@ type View = "Cards" | "Table" | "Kanban";
 const valueOf = (app: Application, key: FilterKey) => app[key]?.trim() || "";
 const nextStep = (app: Application) => applicationDates(app).find(event => event.label !== "Deadline");
 
-export default function InternshipTracker({ applications, onOpen, onAdd, onStatus }: {
+export default function InternshipTracker({ applications, onOpen, onAdd, onDelete, onStatus }: {
   applications: Application[];
   onOpen: (app: Application) => void;
   onAdd: () => void;
+  onDelete: (app: Application) => void;
   onStatus: (app: Application, status: Application["status"]) => void;
 }) {
   const [view, setView] = useState<View>("Cards");
@@ -45,6 +46,9 @@ export default function InternshipTracker({ applications, onOpen, onAdd, onStatu
       {applicationStatuses.map(status => <option key={status}>{status}</option>)}
     </select>;
   }
+  function deleteMenu(app: Application) {
+    return <details className={styles.internshipActions}><summary aria-label={`Actions for ${app.company} / ${app.position}`}>More</summary><button className="text-button" aria-label={`Delete ${app.company} / ${app.position}`} onClick={() => onDelete(app)}>Delete</button></details>;
+  }
   function card(app: Application) {
     return <article key={app.id} className={styles.internshipCard}>
       <button className={styles.cardOpen} onClick={() => onOpen(app)} aria-label={`Open ${app.company} / ${app.position}`}>
@@ -59,6 +63,7 @@ export default function InternshipTracker({ applications, onOpen, onAdd, onStatu
         {app.nextAction && <span>Next: {app.nextAction}</span>}
       </button>
       {statusSelect(app)}
+      {deleteMenu(app)}
     </article>;
   }
   function table(apps: Application[]) {
@@ -66,7 +71,7 @@ export default function InternshipTracker({ applications, onOpen, onAdd, onStatu
       <caption className={styles.srOnly}>Internship applications</caption>
       <thead><tr>{["Company / Position", "Field", "Status", "Internship period", "Deadline / Next step", "Location / Work type", "Interest"].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead>
       <tbody>{apps.map(app => <tr key={app.id}>
-        <td><button className="text-button" onClick={() => onOpen(app)}>{app.company}<br/>{app.position}</button></td>
+        <td><button className="text-button" onClick={() => onOpen(app)}>{app.company}<br/>{app.position}</button>{deleteMenu(app)}</td>
         <td>{app.field || "—"}</td><td>{statusSelect(app)}</td><td>{app.internshipPeriod || "—"}<br/>{app.duration}</td>
         <td>{dates(app)}{app.nextAction && <small>Next: {app.nextAction}</small>}</td>
         <td>{app.location || "—"}<br/>{app.workType || "—"}</td><td>{app.interestLevel || "—"}</td>
