@@ -7,6 +7,35 @@ const mod = { exports: {} };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync("src/lib/career-storage.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module: mod, exports: mod.exports, URL });
 const { careerDefaults, careerReadiness, readCareer, writeCareer, careerKey, safeCareerUrl, projectStatus } = mod.exports;
 function memory() { const values = new Map(); return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }; }
+test("fresh Career uses only minimal generic examples and useful preparation defaults", () => {
+ const defaults = careerDefaults(); const storage = memory(); const data = readCareer(storage, "fresh");
+ assert.equal(defaults.applications.length, 1); assert.equal(defaults.projects.length, 1);
+ const app = data.applications[0];
+ for (const [key, value] of Object.entries({company:"Example Company",position:"Software Engineer Intern",field:"Software Engineering",location:"Bangkok",internshipPeriod:"Nov 2026",status:"Interested",sample:true})) assert.equal(app[key], value);
+ assert.equal(data.projects[0].name, "Personal Web Project"); assert.equal(data.projects[0].sample, true);
+ assert.equal(data.goal.title, "Internship Preparation");
+ assert.ok(data.resume.length); assert.ok(data.skills.length); assert.ok(data.interview.length);
+ assert.equal(careerReadiness(data).total, 0);
+ for (const section of Object.keys(defaults)) assert.equal(storage.getItem(careerKey("fresh", section)), null);
+});
+
+test("new seeds never replace saved records, including old samples, custom goals and empty lists", () => {
+ const storage = memory(); const saved = careerDefaults();
+ saved.goal = {title:"My saved internship goal",roles:"My chosen role"};
+ saved.applications = [0,1,2].map(i => ({...saved.applications[0],id:`sample-application-${i}`,company:`Previously saved company ${i}`,notes:`Saved note ${i}`,sample:i === 0}));
+ saved.projects = [0,1,2,3].map(i => ({...saved.projects[0],id:`sample-project-${i}`,name:`Previously saved project ${i}`,sample:true}));
+ const snapshots = Object.entries(saved).map(([section,value]) => [section, JSON.stringify(value)]);
+ for (const [section,raw] of snapshots) storage.setItem(careerKey("existing",section),raw);
+ const loaded = readCareer(storage,"existing");
+ assert.equal(JSON.stringify(loaded.goal),JSON.stringify(saved.goal));
+ assert.equal(loaded.applications.length,3); assert.equal(loaded.projects.length,4);
+ saved.applications.forEach((app,i) => {assert.equal(loaded.applications[i].company,app.company);assert.equal(loaded.applications[i].notes,app.notes);assert.equal(loaded.applications[i].sample,app.sample);});
+ saved.projects.forEach((project,i) => assert.equal(loaded.projects[i].name,project.name));
+ for (const [section,raw] of snapshots) assert.equal(storage.getItem(careerKey("existing",section)),raw);
+ for (const section of ["applications","projects","resume","skills","interview"]) storage.setItem(careerKey("empty",section),"[]");
+ const empty = readCareer(storage,"empty");
+ for (const section of ["applications","projects","resume","skills","interview"]) assert.equal(empty[section].length,0);
+});
 test("readiness is deterministic, zero initially and 100 when all three preparation groups are complete", () => {
   const data = careerDefaults(); assert.equal(careerReadiness(data).total, 0);
   data.resume.forEach((item) => item.checks.fill(true));
@@ -14,7 +43,7 @@ test("readiness is deterministic, zero initially and 100 when all three preparat
   data.projects.forEach((item) => item.checks.fill(true));
   data.skills.forEach((item) => item.level = "Comfortable");
   data.applications.forEach((item) => item.status = "Rejected");
-  assert.equal(careerReadiness(data).total, 100); assert.equal(careerReadiness(data).readyProjects, 4);
+  assert.equal(careerReadiness(data).total, 100); assert.equal(careerReadiness(data).readyProjects, 1);
   assert.equal(projectStatus({ checks: [true, false, false, false, false] }), "In progress");
   assert.equal(projectStatus({ checks: [false, false, false, false, false] }), "Needs work");
   data.applications = []; data.resume = []; data.projects = []; data.skills = [];
@@ -31,7 +60,7 @@ test("add, edit and delete persist across reload without reviving examples or cr
   assert.equal(readCareer(storage, scope).applications.at(-1).status, "Interview");
   writeCareer(storage, scope, "applications", [], edited);
   assert.equal(readCareer(storage, scope).applications.length, 0);
-  assert.equal(readCareer(storage, "account-two").applications.length, 3);
+  assert.equal(readCareer(storage, "account-two").applications.length, 1);
 });
 test("corrupt data, storage failures and stale edits never overwrite existing data", () => {
   const storage = memory(); const data = readCareer(storage, "local");
@@ -90,6 +119,7 @@ test("linked task IDs fit cloud storage for long Unicode practice notes", () => 
 test("internship migration is read-only and idempotent, preserving legacy details and arrangement", () => {
  const storage = memory();
  const legacy = [{...careerDefaults().applications[0], arrangement:"Hybrid", internshipPeriod:"November 2026", resumeId:"resume-0", nextAction:"Prepare resume", nextActionDate:"2026-10-10"}];
+ for (const key of ["field", "workType", "duration", "periodMatch", "applicationOpen", "contact", "interestLevel"]) delete legacy[0][key];
  const raw = JSON.stringify(legacy); storage.setItem(careerKey("legacy", "applications"), raw);
  const data = readCareer(storage, "legacy"); const app = data.applications[0];
  for (const key of ["field", "duration", "periodMatch", "applicationOpen", "contact", "interestLevel"]) assert.equal(app[key], "");
@@ -108,7 +138,7 @@ test("multiple internship positions and Online Test round trip without crossing 
  const reloaded = readCareer(storage, "one");
  assert.equal(JSON.stringify(reloaded.applications), JSON.stringify([first, second]));
  assert.equal(careerReadiness(reloaded).applications, 2);
- assert.equal(readCareer(storage, "two").applications.length, 3);
+ assert.equal(readCareer(storage, "two").applications.length, 1);
  for (const change of [{interestLevel:2}, {periodMatch:"invalid"}, {applicationOpen:true}, {workType:"invalid"}, {status:"invalid"}]) {
    assert.throws(() => writeCareer(storage, "one", "applications", [{...first, ...change}, second], reloaded.applications));
    assert.equal(JSON.stringify(readCareer(storage, "one").applications), JSON.stringify(reloaded.applications));

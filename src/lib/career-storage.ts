@@ -16,9 +16,9 @@ export type CareerData = { goal: { title: string; roles: string; resumeId?: stri
 export type CareerSection = keyof CareerData;
 export function careerDefaults(): CareerData {
   return {
-    goal: { title: "Summer Internship 2027", roles: "Software Engineer / Backend / Cybersecurity" },
-    applications: ["WD", "KBTG", "SCB TechX"].map((company, i) => ({ id: `sample-application-${i}`, company, position: "Software Engineer Intern", status: i === 0 ? "Preparing" : "Interested", deadline: "", link: "", notes: "ข้อมูลตัวอย่าง — ปรับตามบริษัทและตำแหน่งที่สนใจ", location: "", sample: true })),
-    projects: ["ESP32 Alzheimer Monitor", "Stock Notifier", "McMahon Go Pairing", "Amaris Helper"].map((name, i) => ({ id: `sample-project-${i}`, name, link: "", checks: [false, false, false, false, false], sample: true })),
+    goal: { title: "Internship Preparation", roles: "Software Engineer / Backend / Cybersecurity" },
+    applications: [{ id: "sample-application-0", company: "Example Company", position: "Software Engineer Intern", field: "Software Engineering", location: "Bangkok", internshipPeriod: "Nov 2026", status: "Interested", deadline: "", link: "", notes: "Example opportunity ? edit or delete to get started.", sample: true }],
+    projects: [{ id: "sample-project-0", name: "Personal Web Project", link: "", checks: [false, false, false, false, false], sample: true }],
     skills: [["Python", "Programming"], ["C", "Programming"], ["Git", "Tools"], ["SQL", "Backend"], ["Docker", "Tools"], ["Data Structures", "CS Fundamentals"], ["OOP", "CS Fundamentals"], ["Linux", "Tools"], ["Networking", "CS Fundamentals"], ["Cybersecurity basics", "Cybersecurity"]].map(([name, group], i) => ({ id: `skill-${i}`, name, group, level: "Not started" })),
     resume: ["General", "Software", "Cybersecurity"].map((name, i) => ({ id: `resume-${i}`, name, status: "Draft", link: "", checks: Array(8).fill(false), updatedAt: "" })),
     interview: ["Introduce yourself", "Explain your projects", "OOP", "Data Structures", "SQL", "Networking", "Behavioral questions"].map((name, i) => ({ id: `interview-${i}`, name, done: false })),
