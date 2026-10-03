@@ -21,7 +21,7 @@ export function changeCategory(current: CategoryMap, type: "income" | "expense",
   if (current[type].some((item) => item.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error("มีหมวดหมู่นี้แล้ว");
   return { ...current, [type]: [...current[type], name] };
 }
-export type Entry = { id: string; type: "income" | "expense"; amount: number; title: string; category: string; date: string; note: string; updatedAt: string };
+export type Entry = { purpose?: "" | "investment" | "goal"; goalId?: string; id: string; type: "income" | "expense"; amount: number; title: string; category: string; date: string; note: string; updatedAt: string };
 export function financeMonth(storage: Pick<Storage, "getItem">, key: string, entries: Entry[], currentMonth: string) {
   try {
     const saved = storage.getItem(`${key}.month`);
@@ -42,7 +42,7 @@ export function validDate(value: string) {
 }
 export function readEntries(storage: Pick<Storage, "getItem">, key: string): Entry[] {
   const data: unknown = JSON.parse(storage.getItem(key) ?? "[]");
-  if (!Array.isArray(data) || !data.every((e) => e && typeof e.id === "string" && (e.type === "income" || e.type === "expense") && Number.isSafeInteger(e.amount) && e.amount > 0 && typeof e.title === "string" && typeof e.category === "string" && typeof e.date === "string" && validDate(e.date) && typeof e.note === "string" && typeof e.updatedAt === "string")) throw new Error("อ่านข้อมูลบัญชีไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์");
+  if (!Array.isArray(data) || !data.every((e) => e && typeof e.id === "string" && (e.type === "income" || e.type === "expense") && Number.isSafeInteger(e.amount) && e.amount > 0 && typeof e.title === "string" && typeof e.category === "string" && typeof e.date === "string" && validDate(e.date) && typeof e.note === "string" && typeof e.updatedAt === "string" && (e.purpose === undefined || ["", "investment", "goal"].includes(e.purpose)) && (e.goalId === undefined || typeof e.goalId === "string"))) throw new Error("อ่านข้อมูลบัญชีไม่สำเร็จ กรุณาตรวจสอบพื้นที่จัดเก็บของเบราว์เซอร์");
   return data;
 }
 export function totals(entries: Entry[]) {

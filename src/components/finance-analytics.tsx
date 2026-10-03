@@ -6,6 +6,8 @@ import { accountTypes, budgetSummary, cashFlow, financePlanDefaults, goalSummary
 import { useAccountStorage, useCloud } from "./account-boundary";
 import { dialogKeyboard } from "./dialog-keyboard";
 import ExpenseChart from "./expense-chart";
+import TrendChart from "./finance-trend-chart";
+import FinanceSimulatorReview, { ClosedMonthTrends } from "./finance-simulator-review";
 import styles from "./finance-view.module.css";
 
 type Tab = typeof financeTabs[number];
@@ -23,17 +25,6 @@ const fields: Record<Section,Field[]> = {
 const amounts = ["amount","target","current","contribution","value","openingBalance"];
 function read(storage: Pick<Storage,"getItem">, key: string) {try {return {plan:readFinancePlan(storage,key),error:""};} catch(error) {return {plan:financePlanDefaults(),error:error instanceof Error ? error.message : "Could not read Finance planning data."};}}
 
-function TrendChart({title, points}: {title:string;points:{label:string;value:number}[]}) {
- const min=Math.min(0,...points.map(p=>p.value)), max=Math.max(1,...points.map(p=>p.value));
- const path=points.map((p,i)=>`${i ? "L":"M"}${25+(points.length===1 ? 225 : i/(points.length-1)*450)},${155-(p.value-min)/(max-min)*130}`).join(" ");
- return <section className={styles.panel}><h3>{title}</h3>{!points.length ? <p className={styles.empty}>No history yet.</p> : <><svg className={styles.trendChart} viewBox="0 0 500 195" role="img" aria-label={`${title}. Exact values in the data table below.`}>
-  <line x1="25" x2="475" y1={155-(0-min)/(max-min)*130} y2={155-(0-min)/(max-min)*130} stroke="#dce1d2"/>
-  <path d={path} fill="none" stroke="#71864c" strokeWidth="3"/>
-  {points.map((p,i)=><circle key={p.label} cx={25+(points.length===1 ? 225:i/(points.length-1)*450)} cy={155-(p.value-min)/(max-min)*130} r="3" fill="#71864c"><title>{p.label}: {money(p.value)}</title></circle>)}
-  <text x="25" y="185" fontSize="11" fill="#68725e">{points[0].label}</text><text x="475" y="185" textAnchor="end" fontSize="11" fill="#68725e">{points.at(-1)?.label}</text>
- </svg><details><summary>View chart data</summary><div className={styles.dataScroll}><table className={styles.dataTable}><caption>{title}</caption><thead><tr><th scope="col">Period</th><th scope="col">Amount</th></tr></thead><tbody>{points.map(p=><tr key={p.label}><th scope="row">{p.label}</th><td>{money(p.value)}</td></tr>)}</tbody></table></div></details></>}</section>;
-}
-
 export default function FinanceAnalytics({tab,month,entries,categories,ledgerKey,ledgerError,onEntries}: {tab:Tab;month:string;entries:Entry[];categories:CategoryMap;ledgerKey:string;ledgerError:boolean;onEntries:(entries:Entry[])=>void}) {
  const cloud=useCloud(), storage=useAccountStorage(), key=`${ledgerKey}.analytics`;
  const [state,setState]=useState(()=>read(storage,key));
@@ -48,7 +39,7 @@ export default function FinanceAnalytics({tab,month,entries,categories,ledgerKey
  const modal=!!(editor||deleting);
  useEffect(()=>{if(!modal)return;panel.current?.querySelector<HTMLElement>("input, select, button")?.focus();const overflow=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{document.body.style.overflow=overflow;};},[modal]);
  function close(){setEditor(null);setDeleting(null);setError("");focus.current?.focus();}
- function savePlan(next:FinancePlan){try{if(state.error)throw Error(state.error);writeFinancePlan(storage,key,next,plan);setState({plan:next,error:""});setError("");setNotice(cloud ? "Saved to the account sync queue." : "Saved locally.");return true;}catch(problem){setError(problem instanceof Error ? problem.message : "Save failed. Your existing data is unchanged.");return false;}}
+ function savePlan(next:FinancePlan,expectedEntries?:Entry[]){try{if(expectedEntries)recurringBaseline(storage,ledgerKey,key,expectedEntries,plan);if(state.error)throw Error(state.error);writeFinancePlan(storage,key,next,plan);setState({plan:next,error:""});setError("");setNotice(cloud ? "Saved to the account sync queue." : "Saved locally.");return true;}catch(problem){setError(problem instanceof Error ? problem.message : "Save failed. Your existing data is unchanged.");return false;}}
  function open(section:Section,item?:{id:string}) {
   focus.current=document.activeElement as HTMLElement;setError("");
   const source=(section==="settings" ? plan : item) as unknown as Record<string,string|number> | undefined;
@@ -89,6 +80,7 @@ export default function FinanceAnalytics({tab,month,entries,categories,ledgerKey
  const realized=entries.filter(e=>e.date.startsWith(month)&&e.date<=today);
  const breakdown=[...new Set(realized.filter(e=>e.type==="expense").map(e=>e.category))].map(name=>({name,amount:realized.filter(e=>e.category===name&&e.type==="expense").reduce((s,e)=>s+e.amount,0)})).sort((a,b)=>b.amount-a.amount);
  const flow=cashFlow(entries,plan,today), worth=netWorth(plan.accounts);
+ const historySeries=(count:number)=>spendingSeries(entries.filter(e=>e.date<=today),month,count).map(row=>{const closed=plan.closes.filter(c=>c.month===row.label).at(-1)?.report;return closed?{...row,income:closed.income,expense:closed.expenses,balance:closed.netCashFlow}:row;});
  const actionButtons=(section:Exclude<Section,"settings">,item:{id:string},name:string)=><div className={styles.actions}><button className="text-button" onClick={()=>open(section,item)}>Edit</button><button className={styles.delete} onClick={()=>remove(section,item.id,name)}>Delete</button></div>;
  const cards=(items:{label:string;value:number;note?:string}[])=><div className={styles.stats}>{items.map(item=><section className={styles.stat} key={item.label}><span>{item.label}</span><strong>{money(item.value)}</strong>{item.note&&<small>{item.note}</small>}</section>)}</div>;
  if(tab==="Transactions")return null;
@@ -97,17 +89,19 @@ export default function FinanceAnalytics({tab,month,entries,categories,ledgerKey
   {error&&!modal&&<p role="alert" className={styles.error}>{error} <button onClick={()=>{setState(read(storage,key));setError("");}}>Reload</button></p>}
   <p role="status" className={styles.notice}>{notice}</p>
   <fieldset disabled={!!state.error||ledgerError} className={styles.analyticsBody}>
+  {(tab==="Simulator"||tab==="Monthly Review")&&<FinanceSimulatorReview key={tab} mode={tab} plan={plan} entries={entries} month={month} today={today} onSave={savePlan}/> }
+  {tab==="Analytics"&&<ClosedMonthTrends plan={plan} endMonth={month}/>}
   {tab==="Overview"&&<>
    {cards([{label:"Monthly income",value:summary.income,note:`Previous month: ${money(summary.previous.income)} · change ${money(summary.incomeChange)}`},{label:"Monthly expenses",value:summary.expense,note:`Previous month: ${money(summary.previous.expense)} · change ${money(summary.expenseChange)}`},{label:"Net cash flow",value:summary.balance},{label:"Savings",value:summary.savings,note:"Positive monthly income less expenses; not a transfer."},{label:"Remaining money",value:summary.remainingMoney,note:`Cash balance less ${money(reserve)} planned monthly goal contributions.`},{label:"Average daily spending",value:summary.averageDaily,note:`Expenses divided by ${summary.elapsed} elapsed calendar days.`},{label:"Safe to spend / day",value:summary.safeToSpend,note:`${summary.remaining} days after today; upcoming recorded expenses reserved.`},{label:"Projected month-end balance",value:summary.projectedBalance,note:"Current cash + upcoming recorded income − greater of planned expenses or daily spending pace."}])}
    <section className={styles.panel}><div className={styles.panelHeading}><h3>Cash balance assumptions</h3><button className="secondary-button" onClick={()=>open("settings")}>Set opening balance</button></div><p>Opening balance: {money(plan.openingBalance)}. Cash is this opening balance plus all recorded income minus expenses through the reporting date. Future-dated records are scheduled, not yet received or spent. Recurring schedules are included in Cash Flow.</p><p>Historical months use the full month; current-month comparisons are month-to-date versus the previous full month. Goal balances and net-worth accounts are tracked separately and do not create transactions.</p></section>
-   <div className={styles.analyticsGrid}><section className={styles.panel}><h3>Category spending</h3><ExpenseChart items={breakdown}/></section><TrendChart title="Monthly spending" points={spendingSeries(entries.filter(e=>e.date<=today),month,6).map(row=>({label:row.label,value:row.expense}))}/></div>
+   <div className={styles.analyticsGrid}><section className={styles.panel}><h3>Category spending</h3><ExpenseChart items={breakdown}/></section><TrendChart title="Monthly spending" points={historySeries(6).map(row=>({label:row.label,value:row.expense}))}/></div>
   </>}
   {tab==="Budget"&&<section className={styles.panel}><div className={styles.panelHeading}><h3>Budgets · {month}</h3><button className="primary-button" onClick={()=>open("budgets")}>+ Add budget</button></div><p>{Math.round(summary.fraction*100)}% of the selected month elapsed. Spending excludes future-dated records.</p><div className={styles.analyticsGrid}>{plan.budgets.filter(b=>b.month===month).map(b=>{const s=budgetSummary(b,entries,today);return <article className={styles.analyticsCard} key={b.id}><h4>{b.category}</h4><p>Budget {money(b.amount)} · Spent {money(s.spent)}</p><p>Remaining {money(s.remaining)} · {s.percent.toFixed(1)}% used</p><progress aria-label={`${b.category} budget used`} max={100} value={Math.min(100,s.percent)}/>{(s.faster||s.exceeded)&&<p className={styles.expense}>{s.exceeded ? "Over budget" : "Spending faster than month progress"}</p>}{actionButtons("budgets",b,b.category)}</article>;})}</div>{!plan.budgets.some(b=>b.month===month)&&<p className={styles.empty}>No budgets for this month. Add an expense category limit to get started.</p>}</section>}
   {tab==="Analytics"&&<>
-   <section className={styles.panel}><div className={styles.panelHeading}><h3>Spending analytics · {month}</h3><label>History window<select value={range} onChange={e=>setRange(Number(e.target.value))}>{[3,6,12].map(n=><option key={n} value={n}>{n} months</option>)}</select></label></div><p>Average daily spending: {money(summary.averageDaily)}. Empty periods show zero; only recorded data is included.</p>{!realized.length&&<p className={styles.empty}>No recorded transactions in this month yet.</p>}<ExpenseChart items={breakdown}/></section>
+   <section className={styles.panel}><div className={styles.panelHeading}><h3>Spending analytics · {month}</h3><label>History window<select value={range} onChange={e=>setRange(Number(e.target.value))}>{[3,6,12].map(n=><option key={n} value={n}>{n} months</option>)}</select></label></div><p>Average daily spending: {money(summary.averageDaily)}. Empty periods show zero. Monthly history uses saved close revisions where available, otherwise live recorded data.</p>{!realized.length&&<p className={styles.empty}>No recorded transactions in this month yet.</p>}<ExpenseChart items={breakdown}/></section>
    <section className={styles.panel}><label>Spending trend<select value={trend} onChange={e=>setTrend(e.target.value)}><option value="daily">Daily</option><option value="weekly">Weekly (7-day blocks)</option><option value="monthly">Monthly</option></select></label></section>
-   <TrendChart title={`${trend} spending trend`} points={trend==="monthly" ? spendingSeries(entries.filter(e=>e.date<=today),month,range).map(r=>({label:r.label,value:r.expense})) : spendingTrend(entries.filter(e=>e.date<=today),month,trend==="weekly").map(r=>({label:r.label,value:r.amount}))}/>
-   <section className={styles.panel}><h3>Month-over-month comparison</h3><div className={styles.dataScroll}><table className={styles.dataTable}><thead><tr><th>Month</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead><tbody>{spendingSeries(entries.filter(e=>e.date<=today),month,range).map(r=><tr key={r.label}><th scope="row">{r.label}</th><td>{money(r.income)}</td><td>{money(r.expense)}</td><td>{money(r.balance)}</td></tr>)}</tbody></table></div></section>
+   <TrendChart title={`${trend} spending trend`} points={trend==="monthly" ? historySeries(range).map(r=>({label:r.label,value:r.expense})) : spendingTrend(entries.filter(e=>e.date<=today),month,trend==="weekly").map(r=>({label:r.label,value:r.amount}))}/>
+   <section className={styles.panel}><h3>Month-over-month comparison</h3><div className={styles.dataScroll}><table className={styles.dataTable}><thead><tr><th>Month</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead><tbody>{historySeries(range).map(r=><tr key={r.label}><th scope="row">{r.label}</th><td>{money(r.income)}</td><td>{money(r.expense)}</td><td>{money(r.balance)}</td></tr>)}</tbody></table></div></section>
    <div className={styles.analyticsGrid}><section className={styles.panel}><h3>Top expense categories</h3>{breakdown.slice(0,5).map(r=><p key={r.name}>{r.name} · {money(r.amount)}</p>)}{!breakdown.length&&<p>No expenses yet.</p>}</section><section className={styles.panel}><h3>Largest transactions</h3>{[...realized].filter(e=>e.type==="expense").sort((a,b)=>b.amount-a.amount).slice(0,5).map(e=><p key={e.id}>{e.title} · {e.date} · {money(e.amount)}</p>)}{!breakdown.length&&<p>No expenses yet.</p>}</section></div>
    <TrendChart title="Average spending by weekday" points={weekdaySpending(entries,month,today).map(r=>({label:r.label,value:r.average}))}/>
   </>}

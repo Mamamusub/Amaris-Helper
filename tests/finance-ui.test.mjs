@@ -110,3 +110,32 @@ test("failed planning writes retain the editor and corrupt analytics never reset
  const {h}=setup();h.render();h.click("Goals");h.click("+ Add goal");h.field("Goal name","Fund");h.field("Target amount","100");h.failWrites();submit(h);assert.equal(h.findAll(n=>n.props.role==="dialog").length,1);assert.equal(h.storage.get("agent-helper.finance.v1.analytics"),undefined);assert.ok(h.findAll(n=>n.props.role==="alert").length);
  const other=setup().h;other.storage.set("agent-helper.finance.v1.analytics","broken");other.render();assert.ok(other.findAll(n=>n.props.role==="alert").length);other.click("Transactions");assert.ok(other.findAll(n=>n.props["aria-label"]==="Account entries").length);assert.equal(other.storage.get("agent-helper.finance.v1.analytics"),"broken");
 });
+
+test("Simulator previews immediately, persists scenarios and supports comparison, duplicate, edit and delete",()=>{
+ const {h}=setup();h.render();h.click("Simulator");h.click("+ Add scenario");h.field("Scenario name","Current Plan");h.field("Monthly income","1000");h.field("Monthly expenses","500");h.field("Monthly savings","100");h.field("Monthly investment contribution","100");h.field("Simulation period","10");
+ const before=h.text(h.findAll(n=>n.props.role==="status").at(-1));h.field("Expected annual return","8");assert.notEqual(h.text(h.findAll(n=>n.props.role==="status").at(-1)),before);submit(h);assert.equal(readPlan(h).scenarios[0].years,10);
+ h.click("Duplicate");assert.equal(readPlan(h).scenarios.length,2);assert.notEqual(readPlan(h).scenarios[0].id,readPlan(h).scenarios[1].id);
+ h.click("Edit scenario");h.field("Scenario name","Higher Investment");h.field("Monthly investment contribution","200");submit(h);assert.ok(readPlan(h).scenarios.some(s=>s.name==="Higher Investment"));assert.ok(h.text(h.render()).includes("Versus"));
+ h.refresh();h.click("Simulator");assert.equal(readPlan(h).scenarios.length,2);h.click("Delete scenario");assert.equal(readPlan(h).scenarios.length,1);
+ h.click("+ Add scenario");h.field("Scenario name","Keep draft");h.failWrites();submit(h);assert.equal(h.findAll(n=>n.props.role==="dialog").length,1);assert.equal(readPlan(h).scenarios.length,1);
+});
+
+test("Monthly Review requires review and explicit confirmation, preserves history and appends replacements",()=>{
+ const {h,today}=setup();const month=h.load("src/lib/finance-analytics.ts").shiftFinanceMonth(today.slice(0,7),-1);
+ h.storage.set("agent-helper.finance.v1.month",month);
+ const records=[{id:"salary",title:"Salary",type:"income",amount:100000,category:"Salary",date:month+"-01",note:"",updatedAt:"old"},{id:"food",title:"Food",type:"expense",amount:20000,category:"Food",date:month+"-02",note:"",updatedAt:"old"}];
+ const raw=JSON.stringify(records);h.storage.set("agent-helper.finance.v1",raw);h.render();h.click("Monthly Review");h.click("Close Month");assert.equal(h.storage.get("agent-helper.finance.v1.analytics"),undefined);
+ assert.equal(h.findAll(n=>n.type==="button"&&h.text(n)==="Save close")[0].props.disabled,true);
+ h.field("I have reviewed",true);h.click("Save close");assert.equal(readPlan(h).closes.length,1);assert.equal(h.storage.get("agent-helper.finance.v1"),raw);const original=JSON.stringify(readPlan(h).closes[0]);
+ h.click("Back to live review");assert.ok(h.findAll(n=>n.type==="button"&&h.text(n)==="Review replacement").length);
+ records[1].amount=40000;records[1].category="Changed category";h.storage.set("agent-helper.finance.v1",JSON.stringify(records));h.refresh();h.click("Monthly Review");
+ const historical=h.findAll(n=>n.type==="button"&&h.text(n).includes(month+" · revision 1"))[0];historical.props.onClick();h.render();assert.equal(JSON.stringify(readPlan(h).closes[0]),original);assert.ok(h.text(h.render()).includes("Values and labels are frozen"));
+ h.click("Back to live review");h.click("Review replacement");h.field("I confirm replacing",true);h.click("Save close");assert.equal(readPlan(h).closes.length,2);assert.equal(JSON.stringify(readPlan(h).closes[0]),original);assert.equal(readPlan(h).closes[1].report.expenses,40000);
+ h.click("Analytics");h.field("Closed history window","12");assert.ok(h.text(h.render()).includes("Closed savings rate"));
+});
+
+test("transaction purpose tags are optional and enable actual contribution reporting",()=>{
+ const {h,today}=setup();const old={id:"transfer",title:"Contribution",type:"expense",amount:5000,category:"Food",date:today,note:"Original note",updatedAt:"old"};h.storage.set("agent-helper.finance.v1",JSON.stringify([old]));h.render();h.click("Transactions");
+ h.findAll(n=>n.type==="button"&&n.props["aria-label"]?.endsWith(" Contribution"))[0].props.onClick();h.render();h.field("Payment purpose","investment");submit(h);
+ const saved=JSON.parse(h.storage.get("agent-helper.finance.v1"));assert.equal(saved[0].purpose,"investment");assert.equal(saved[0].note,"Original note");h.click("Monthly Review");assert.ok(h.text(h.render()).includes("Investment contribution"));
+});

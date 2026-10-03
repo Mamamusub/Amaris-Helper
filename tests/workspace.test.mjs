@@ -178,6 +178,12 @@ test("Finance planning and recurring ledger updates sync as one account-owned op
  await assert.rejects(apply(alice,[change(ledgerId,currentLedger.version,{id:ledgerId,value:"[]"},"document"),change(planId,priorPlanVersion,{id:planId,value:JSON.stringify(plan)},"document")]),/version conflict/);
  assert.equal((await snapshot(alice)).find(row=>row.kind==="document"&&row.id===ledgerId).data.value,JSON.stringify(next.entries));
  assert.equal((await snapshot(bob)).some(row=>row.kind==="document"&&row.id===planId),false);
+ const {closeFinanceMonth}=load("src/lib/finance-review.ts");
+ const withScenario={...next.plan,scenarios:[{id:"current",name:"Current Plan",startingCash:10000,income:10000,expenses:5000,savings:1000,investment:1000,annualReturn:5,inflation:2,years:5}]};
+ const withClose=closeFinanceMonth(withScenario,next.entries,"2026-09","2026-10-03T12:00:00Z");
+ storageA.setItem(planKey,JSON.stringify(withClose));await settled(a);await b.sync();
+ assert.equal(readFinancePlan(storageB,planKey).scenarios[0].name,"Current Plan");
+ assert.equal(JSON.stringify(readFinancePlan(storageB,planKey).closes),JSON.stringify(withClose.closes));
  a.dispose();b.dispose();
 });
 

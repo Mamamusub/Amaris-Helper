@@ -1,14 +1,15 @@
 import { readEntries, totals, validDate, type Entry } from "./finance";
+import { validScenario, validMonthClose, type Scenario, type MonthClose } from "./finance-review";
 
-export const financeTabs = ["Overview", "Transactions", "Budget", "Analytics", "Cash Flow", "Goals", "Net Worth", "Recurring"] as const;
+export const financeTabs = ["Overview", "Transactions", "Budget", "Analytics", "Cash Flow", "Goals", "Net Worth", "Recurring", "Simulator", "Monthly Review"] as const;
 export const accountTypes = ["Cash", "Bank", "Investment", "Crypto", "Other Asset", "Debt"] as const;
 export type Budget = { id: string; month: string; category: string; amount: number };
 export type SavingGoal = { id: string; name: string; target: number; current: number; targetDate: string; contribution: number; notes: string };
 export type FinanceAccount = { id: string; name: string; type: typeof accountTypes[number]; value: number };
 export type NetWorthSnapshot = { id: string; month: string; assets: number; liabilities: number; updatedAt: string };
 export type Recurring = { id: string; name: string; amount: number; category: string; type: Entry["type"]; frequency: "weekly" | "monthly" | "yearly"; startDate: string; endDate: string; nextDate: string; paused: boolean };
-export type FinancePlan = { version: 1; openingBalance: number; budgets: Budget[]; goals: SavingGoal[]; accounts: FinanceAccount[]; snapshots: NetWorthSnapshot[]; recurring: Recurring[] };
-export const financePlanDefaults = (): FinancePlan => ({ version: 1, openingBalance: 0, budgets: [], goals: [], accounts: [], snapshots: [], recurring: [] });
+export type FinancePlan = { version: 1; openingBalance: number; budgets: Budget[]; goals: SavingGoal[]; accounts: FinanceAccount[]; snapshots: NetWorthSnapshot[]; recurring: Recurring[]; scenarios:Scenario[]; closes:MonthClose[] };
+export const financePlanDefaults = (): FinancePlan => ({ version: 1, openingBalance: 0, budgets: [], goals: [], accounts: [], snapshots: [], recurring: [], scenarios:[], closes:[] });
 const amount = (v: unknown) => Number.isSafeInteger(v) && (v as number) >= 0;
 const text = (v: unknown, max = 500) => typeof v === "string" && v.length <= max;
 const name = (v: unknown) => text(v, 120) && !!(v as string).trim();
@@ -18,10 +19,10 @@ export function validateFinancePlan(value: unknown): value is FinancePlan {
  if (!value || typeof value !== "object") return false;
  const p = value as FinancePlan;
  if (p.version !== 1 || !Number.isSafeInteger(p.openingBalance)) return false;
- for (const key of ["budgets", "goals", "accounts", "snapshots", "recurring"] as const) {
+ for (const key of ["budgets", "goals", "accounts", "snapshots", "recurring", "scenarios", "closes"] as const) {
   if (!Array.isArray(p[key]) || !p[key].every(item => item && name(item.id)) || new Set(p[key].map(item => item.id)).size !== p[key].length) return false;
  }
- return p.budgets.every(b => validMonth(b.month) && name(b.category) && amount(b.amount) && b.amount > 0) &&
+ return p.scenarios.every(validScenario) && p.closes.every(validMonthClose) && p.budgets.every(b => validMonth(b.month) && name(b.category) && amount(b.amount) && b.amount > 0) &&
  new Set(p.budgets.map(b => `${b.month}:${b.category}`)).size === p.budgets.length &&
  p.goals.every(g => name(g.name) && amount(g.target) && g.target > 0 && amount(g.current) && optionalDate(g.targetDate) && amount(g.contribution) && text(g.notes, 2000)) &&
  p.accounts.every(a => name(a.name) && accountTypes.includes(a.type) && amount(a.value)) &&
@@ -41,6 +42,7 @@ export function readFinancePlan(storage: Pick<Storage, "getItem">, key: string):
 export function writeFinancePlan(storage: Pick<Storage, "getItem" | "setItem">, key: string, next: FinancePlan, expected: FinancePlan) {
  if (!validateFinancePlan(next)) throw new Error("Check names, amounts, dates and duplicate monthly budgets.");
  if (JSON.stringify(readFinancePlan(storage, key)) !== JSON.stringify(expected)) throw new Error("Finance planning data changed elsewhere. Reload before saving.");
+ if (expected.closes.some(close => JSON.stringify(next.closes.find(item=>item.id===close.id)) !== JSON.stringify(close))) throw new Error("Closed reports are immutable. Add an explicitly confirmed replacement revision.");
  storage.setItem(key, JSON.stringify(next));
 }
 export function shiftFinanceDay(value: string, days: number) {
