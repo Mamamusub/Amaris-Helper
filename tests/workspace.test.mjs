@@ -158,6 +158,29 @@ test("legacy import only includes the selected account and never imports credent
   assert.equal(values.get("API_KEY"), "secret");
 });
 
+test("Finance planning and recurring ledger updates sync as one account-owned operation without duplicate payments", async () => {
+ const {financePlanDefaults,recordRecurring,readFinancePlan}=load("src/lib/finance-analytics.ts");
+ const {readEntries}=load("src/lib/finance.ts");
+ const local=memory(), a=new WorkspaceSync(alice,local,transport(alice).request), b=new WorkspaceSync(alice,memory(),transport(alice).request);
+ await a.sync();await b.sync();
+ const storageA=accountStorage(a,local),storageB=accountStorage(b,memory());
+ const ledgerId="finance.v1", planId="finance.v1.analytics", ledgerKey=`${a.key}.${ledgerId}`, planKey=`${a.key}.${planId}`;
+ const plan=financePlanDefaults();plan.recurring=[{id:"groceries",name:"Groceries",amount:1000,category:"Food",type:"expense",frequency:"weekly",startDate:"2026-10-01",nextDate:"2026-10-01",endDate:"",paused:false}];
+ a.enqueueBatch([{kind:"document",value:[{id:ledgerId,value:"[]"},{id:planId,value:JSON.stringify(plan)}]}]);await settled(a);await b.sync();
+ const next=recordRecurring(readFinancePlan(storageA,planKey),readEntries(storageA,ledgerKey),"2026-10-10","now");
+ assert.equal(next.added,2);
+ const priorPlanVersion=a.version("document",planId);
+ assert.equal(a.enqueueBatch([{kind:"document",value:[{id:ledgerId,value:JSON.stringify(next.entries)}],expected:{[ledgerId]:a.version("document",ledgerId)}},{kind:"document",value:[{id:planId,value:JSON.stringify(next.plan)}],expected:{[planId]:priorPlanVersion}}]),true);
+ await settled(a);await b.sync();
+ assert.equal(storageB.getItem(ledgerKey),storageA.getItem(ledgerKey));assert.equal(storageB.getItem(planKey),storageA.getItem(planKey));
+ assert.equal(recordRecurring(readFinancePlan(storageB,planKey),readEntries(storageB,ledgerKey),"2026-10-10","later").added,0);
+ const currentLedger=(await snapshot(alice)).find(row=>row.kind==="document"&&row.id===ledgerId);
+ await assert.rejects(apply(alice,[change(ledgerId,currentLedger.version,{id:ledgerId,value:"[]"},"document"),change(planId,priorPlanVersion,{id:planId,value:JSON.stringify(plan)},"document")]),/version conflict/);
+ assert.equal((await snapshot(alice)).find(row=>row.kind==="document"&&row.id===ledgerId).data.value,JSON.stringify(next.entries));
+ assert.equal((await snapshot(bob)).some(row=>row.kind==="document"&&row.id===planId),false);
+ a.dispose();b.dispose();
+});
+
 test("identical countdown completion from two devices is acknowledged without a false conflict", async () => {
   const data = { id: "focus-session", value: JSON.stringify({ id: "round", endedAt: 100000, elapsedMs: 60000 }) };
   await apply(alice, [change(data.id, 0, data, "document")]);

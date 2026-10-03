@@ -1,4 +1,17 @@
 .page { color: #303b2d; }
+.financeNav { display:flex; flex-direction:row; flex-wrap:wrap; gap:5px; padding:6px; margin:18px 0 24px; border-radius:12px; background:#eceee2; }
+.financeNav button { border:0; border-radius:8px; padding:8px 12px; background:transparent; color:#5c6950; font-size:12px; }
+.financeNav button[aria-pressed=true] { background:#fffef8; color:#374b29; font-weight:600; box-shadow:0 1px 4px #35402e15; }
+.analyticsBody { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; min-width:0; padding:0; margin:0; border:0; }
+.analyticsBody p { font-size:13px; line-height:1.7; overflow-wrap:anywhere; }.analyticsBody small { font-size:11px; color:#68725e; }
+.analyticsGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:16px; }
+.analyticsCard { padding:18px; border:1px solid #dce1d2; background:#fffef8; border-radius:14px; min-width:0; }
+.analyticsCard h4 { margin:0 0 12px; overflow-wrap:anywhere; }.analyticsCard .actions { justify-content:flex-start; }.analyticsCard .actions button { margin:0; }
+.page progress { width:100%; height:10px; accent-color:#71864c; }.trendChart { display:block; width:100%; height:auto; max-height:280px; margin:16px 0; }
+.dataScroll { max-width:100%; overflow-x:auto; }.dataTable { border-collapse:collapse; width:100%; font-size:12px; text-align:left; }
+.dataTable th,.dataTable td { padding:10px; border-bottom:1px solid #e4e8dc; white-space:nowrap; }.dataTable th { color:#617050; }.dataTable caption { padding:8px; text-align:left; }
+.analyticsBody details summary { cursor:pointer; padding:10px 0; font-size:12px; }.page summary:focus-visible { outline:2px solid #526e34; outline-offset:3px; }
+@media(max-width:700px) { .analyticsGrid { grid-template-columns:minmax(0,1fr); }.analyticsBody .panelHeading { flex-wrap:wrap; }.financeNav { flex-wrap:nowrap; max-width:100%; overflow-x:auto; }.financeNav button { flex-shrink:0; }.analyticsCard { padding:14px; } }
 .heading,.actions,.panelHeading,.dayHeading,.category>div { display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .heading h2 { font-size:30px; margin:10px 0; }
 .heading p,.storage { color:#68725e; font-size:13px; line-height:1.7; }
